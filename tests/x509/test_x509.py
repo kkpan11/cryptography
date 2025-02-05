@@ -14,7 +14,7 @@ import pytest
 
 from cryptography import utils, x509
 from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
-from cryptography.hazmat.bindings._rust import asn1
+from cryptography.hazmat.bindings._rust import test_support
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import (
     dh,
@@ -31,12 +31,14 @@ from cryptography.hazmat.primitives.asymmetric import (
 from cryptography.hazmat.primitives.asymmetric.utils import (
     decode_dss_signature,
 )
+from cryptography.x509.extensions import ExtendedKeyUsage
 from cryptography.x509.name import _ASN1Type
 from cryptography.x509.oid import (
     AuthorityInformationAccessOID,
     ExtendedKeyUsageOID,
     ExtensionOID,
     NameOID,
+    PublicKeyAlgorithmOID,
     SignatureAlgorithmOID,
     SubjectInformationAccessOID,
 )
@@ -792,14 +794,42 @@ class TestRevokedCertificate:
         assert crl[2].serial_number == 3
 
 
-@pytest.mark.supported(
-    only_if=lambda backend: (
-        not backend._lib.CRYPTOGRAPHY_IS_LIBRESSL
-        and not backend._lib.CRYPTOGRAPHY_IS_BORINGSSL
-        and not backend._lib.CRYPTOGRAPHY_OPENSSL_LESS_THAN_111E
-    ),
-    skip_message="Does not support RSA PSS loading",
-)
+class TestRSAECertificate:
+    def test_load_cert_pub_key(self, backend):
+        cert = _load_cert(
+            os.path.join("x509", "custom", "ca", "rsae_ca.pem"),
+            x509.load_pem_x509_certificate,
+        )
+        assert isinstance(cert, x509.Certificate)
+        expected_pub_key = load_vectors_from_file(
+            os.path.join("x509", "custom", "ca", "rsa_key.pem"),
+            lambda pemfile: serialization.load_pem_private_key(
+                pemfile.read(), None, unsafe_skip_rsa_key_validation=True
+            ),
+            mode="rb",
+        ).public_key()
+        assert isinstance(expected_pub_key, rsa.RSAPublicKey)
+        pub_key = cert.public_key()
+        assert isinstance(pub_key, rsa.RSAPublicKey)
+        assert (
+            cert.public_key_algorithm_oid
+            == PublicKeyAlgorithmOID.RSAES_PKCS1_v1_5
+        )
+        assert pub_key == expected_pub_key
+        pss = cert.signature_algorithm_parameters
+        assert isinstance(pss, padding.PSS)
+        assert isinstance(pss._mgf, padding.MGF1)
+        assert isinstance(pss._mgf._algorithm, hashes.SHA256)
+        assert pss._salt_length == 0x14
+        assert isinstance(cert.signature_hash_algorithm, hashes.SHA256)
+        pub_key.verify(
+            cert.signature,
+            cert.tbs_certificate_bytes,
+            pss,
+            cert.signature_hash_algorithm,
+        )
+
+
 class TestRSAPSSCertificate:
     def test_load_cert_pub_key(self, backend):
         cert = _load_cert(
@@ -814,6 +844,9 @@ class TestRSAPSSCertificate:
         assert isinstance(expected_pub_key, rsa.RSAPublicKey)
         pub_key = cert.public_key()
         assert isinstance(pub_key, rsa.RSAPublicKey)
+        assert (
+            cert.public_key_algorithm_oid == PublicKeyAlgorithmOID.RSASSA_PSS
+        )
         assert pub_key == expected_pub_key
         pss = cert.signature_algorithm_parameters
         assert isinstance(pss, padding.PSS)
@@ -905,6 +938,11 @@ class TestRSACertificate:
         )
         assert isinstance(
             cert.signature_algorithm_parameters, padding.PKCS1v15
+        )
+        assert isinstance(cert.public_key(), rsa.RSAPublicKey)
+        assert (
+            cert.public_key_algorithm_oid
+            == PublicKeyAlgorithmOID.RSAES_PKCS1_v1_5
         )
 
     def test_check_pkcs1_signature_algorithm_parameters(self, backend):
@@ -1002,6 +1040,11 @@ class TestRSACertificate:
         assert (
             cert.signature_algorithm_oid
             == SignatureAlgorithmOID._RSA_WITH_SHA1
+        )
+        assert isinstance(cert.public_key(), rsa.RSAPublicKey)
+        assert (
+            cert.public_key_algorithm_oid
+            == PublicKeyAlgorithmOID.RSAES_PKCS1_v1_5
         )
 
     def test_load_bmpstring_explicittext(self, backend):
@@ -1105,7 +1148,7 @@ class TestRSACertificate:
 
         with pytest.raises(
             x509.DuplicateExtension,
-            match="Duplicate 2.5.29.19 extension found",
+            match=r"Duplicate 2\.5\.29\.19 extension found",
         ):
             cert.tbs_precertificate_bytes
 
@@ -1818,6 +1861,138 @@ class TestRSACertificate:
         with pytest.raises(TypeError):
             cert.verify_directly_issued_by(leaf)
 
+    def test_admissions_extension(self, backend):
+        cert = _load_cert(
+            os.path.join(
+                "x509",
+                "custom",
+                "admissions_extension_optional_data_not_provided.pem",
+            ),
+            x509.load_pem_x509_certificate,
+        )
+        ext = cert.extensions.get_extension_for_class(x509.Admissions)
+        assert ext.value == x509.Admissions(
+            authority=x509.DirectoryName(
+                value=x509.Name(
+                    [
+                        x509.NameAttribute(
+                            oid=x509.NameOID.COUNTRY_NAME, value="DE"
+                        ),
+                        x509.NameAttribute(
+                            oid=x509.NameOID.ORGANIZATION_NAME,
+                            value="Elektronisches Gesundheitsberuferegister",
+                        ),
+                    ]
+                )
+            ),
+            admissions=[
+                x509.Admission(
+                    admission_authority=x509.RegisteredID(
+                        value=x509.NameOID.ORGANIZATION_NAME
+                    ),
+                    naming_authority=x509.NamingAuthority(
+                        id=x509.ObjectIdentifier("1.2.276.0.76.4.223"),
+                        url="",
+                        text="BetriebsstÃ¤tte GKV-Spitzenverband",
+                    ),
+                    profession_infos=[
+                        x509.ProfessionInfo(
+                            naming_authority=x509.NamingAuthority(
+                                id=x509.ObjectIdentifier("1.2.276.0.76.4.225"),
+                                url="https://example.com",
+                                text=(
+                                    "BetriebsstÃ¤tte Deutscher "
+                                    "Apothekerverband"
+                                ),
+                            ),
+                            profession_items=["Ã\x84rztin/Arzt", ""],
+                            profession_oids=[
+                                x509.ObjectIdentifier("1.2.276.0.76.4.30"),
+                                x509.ObjectIdentifier("1.2.276.0.76.4.31"),
+                            ],
+                            registration_number="9-999/99999999",
+                            add_profession_info=(
+                                b'\x16"additional profession info example'
+                            ),
+                        )
+                    ],
+                ),
+                x509.Admission(
+                    admission_authority=x509.OtherName(
+                        type_id=x509.NameOID.COUNTRY_NAME,
+                        value=b"\x04\x04\x13\x02DE",
+                    ),
+                    naming_authority=None,
+                    profession_infos=[
+                        x509.ProfessionInfo(
+                            naming_authority=x509.NamingAuthority(
+                                id=x509.ObjectIdentifier("1.2.276.0.76.4.227"),
+                                url=None,
+                                text=(
+                                    "BetriebsstÃ¤tte der Deutsche Krankenhaus "
+                                    "TrustCenter und Informationsverarbeitung "
+                                    "GmbH"
+                                ),
+                            ),
+                            profession_items=["Krankenhaus"],
+                            profession_oids=[
+                                x509.ObjectIdentifier("1.2.276.0.76.4.53"),
+                                x509.ObjectIdentifier("1.2.276.0.76.4.246"),
+                            ],
+                            registration_number="9.9.9-99999999",
+                            add_profession_info=None,
+                        ),
+                        x509.ProfessionInfo(
+                            naming_authority=None,
+                            profession_items=[
+                                "Krankenhaus",
+                                "BetriebsstÃ¤tte Geburtshilfe",
+                            ],
+                            profession_oids=[
+                                x509.ObjectIdentifier("1.2.276.0.76.4.53")
+                            ],
+                            registration_number="",
+                            add_profession_info=None,
+                        ),
+                    ],
+                ),
+                x509.Admission(
+                    admission_authority=None,
+                    naming_authority=None,
+                    profession_infos=[
+                        x509.ProfessionInfo(
+                            naming_authority=None,
+                            profession_items=[],
+                            profession_oids=None,
+                            registration_number=None,
+                            add_profession_info=None,
+                        )
+                    ],
+                ),
+                x509.Admission(
+                    admission_authority=None,
+                    naming_authority=x509.NamingAuthority(None, None, None),
+                    profession_infos=[],
+                ),
+                x509.Admission(
+                    admission_authority=None,
+                    naming_authority=None,
+                    profession_infos=[],
+                ),
+            ],
+        )
+
+        cert = _load_cert(
+            os.path.join(
+                "x509",
+                "custom",
+                "admissions_extension_authority_not_provided.pem",
+            ),
+            x509.load_pem_x509_certificate,
+        )
+        ext = cert.extensions.get_extension_for_class(x509.Admissions)
+        assert ext.value == x509.Admissions(authority=None, admissions=[])
+
 
 class TestRSACertificateRequest:
     @pytest.mark.parametrize(
@@ -1842,6 +2017,10 @@ class TestRSACertificateRequest:
         )
         public_key = request.public_key()
         assert isinstance(public_key, rsa.RSAPublicKey)
+        assert (
+            request.public_key_algorithm_oid
+            == PublicKeyAlgorithmOID.RSAES_PKCS1_v1_5
+        )
         subject = request.subject
         assert isinstance(subject, x509.Name)
         assert list(subject) == [
@@ -2258,6 +2437,12 @@ class TestRSACertificateRequest:
         cert = builder.sign(issuer_private_key, hashalg(), backend)
 
         assert cert.version is x509.Version.v3
+        public_key = cert.public_key()
+        assert isinstance(public_key, rsa.RSAPublicKey)
+        assert (
+            cert.public_key_algorithm_oid
+            == PublicKeyAlgorithmOID.RSAES_PKCS1_v1_5
+        )
         assert cert.signature_algorithm_oid == hashalg_oid
         assert type(cert.signature_hash_algorithm) is hashalg
         _check_cert_times(
@@ -2377,7 +2562,7 @@ class TestRSACertificateRequest:
 
         cert = builder.sign(issuer_private_key, hashes.SHA256(), backend)
 
-        parsed = asn1.test_parse_certificate(
+        parsed = test_support.test_parse_certificate(
             cert.public_bytes(serialization.Encoding.DER)
         )
 
@@ -2563,7 +2748,7 @@ class TestCertificateBuilder:
             not_valid_before=not_valid_before,
             not_valid_after=not_valid_after,
         )
-        parsed = asn1.test_parse_certificate(
+        parsed = test_support.test_parse_certificate(
             cert.public_bytes(serialization.Encoding.DER)
         )
         # UTC TIME
@@ -3036,7 +3221,7 @@ class TestCertificateBuilder:
         )
         cert = cert_builder.sign(private_key, hashes.SHA256(), backend)
         _check_cert_times(cert, not_valid_before=time, not_valid_after=time)
-        parsed = asn1.test_parse_certificate(
+        parsed = test_support.test_parse_certificate(
             cert.public_bytes(serialization.Encoding.DER)
         )
         # UTC TIME
@@ -3316,6 +3501,9 @@ class TestCertificateBuilder:
 
         assert cert.version is x509.Version.v3
         assert cert.signature_algorithm_oid == hashalg_oid
+        public_key = cert.public_key()
+        assert isinstance(public_key, dsa.DSAPublicKey)
+        assert cert.public_key_algorithm_oid == PublicKeyAlgorithmOID.DSA
         _check_cert_times(
             cert,
             not_valid_before=not_valid_before,
@@ -3388,6 +3576,12 @@ class TestCertificateBuilder:
         cert = builder.sign(issuer_private_key, hashalg(), backend)
 
         assert cert.version is x509.Version.v3
+        public_key = cert.public_key()
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)
+        assert (
+            cert.public_key_algorithm_oid
+            == PublicKeyAlgorithmOID.EC_PUBLIC_KEY
+        )
         assert cert.signature_algorithm_oid == hashalg_oid
         assert type(cert.signature_hash_algorithm) is hashalg
         _check_cert_times(
@@ -3488,6 +3682,7 @@ class TestCertificateBuilder:
         assert cert.signature_algorithm_oid == SignatureAlgorithmOID.ED25519
         assert cert.signature_hash_algorithm is None
         assert isinstance(cert.public_key(), ed25519.Ed25519PublicKey)
+        assert cert.public_key_algorithm_oid == PublicKeyAlgorithmOID.ED25519
         assert cert.version is x509.Version.v3
         _check_cert_times(
             cert,
@@ -3550,6 +3745,7 @@ class TestCertificateBuilder:
         )
         assert isinstance(cert.signature_hash_algorithm, hashes.SHA256)
         assert isinstance(cert.public_key(), ed25519.Ed25519PublicKey)
+        assert cert.public_key_algorithm_oid == PublicKeyAlgorithmOID.ED25519
 
     @pytest.mark.supported(
         only_if=lambda backend: backend.ed448_supported(),
@@ -3591,6 +3787,7 @@ class TestCertificateBuilder:
         assert cert.signature_algorithm_oid == SignatureAlgorithmOID.ED448
         assert cert.signature_hash_algorithm is None
         assert isinstance(cert.public_key(), ed448.Ed448PublicKey)
+        assert cert.public_key_algorithm_oid == PublicKeyAlgorithmOID.ED448
         assert cert.version is x509.Version.v3
         _check_cert_times(
             cert,
@@ -3653,6 +3850,7 @@ class TestCertificateBuilder:
         )
         assert isinstance(cert.signature_hash_algorithm, hashes.SHA256)
         assert isinstance(cert.public_key(), ed448.Ed448PublicKey)
+        assert cert.public_key_algorithm_oid == PublicKeyAlgorithmOID.ED448
 
     @pytest.mark.supported(
         only_if=lambda backend: (
@@ -3661,10 +3859,18 @@ class TestCertificateBuilder:
         skip_message="Requires OpenSSL with x25519 & x448 support",
     )
     @pytest.mark.parametrize(
-        ("priv_key_cls", "pub_key_cls"),
+        ("priv_key_cls", "pub_key_cls", "pub_key_oid"),
         [
-            (x25519.X25519PrivateKey, x25519.X25519PublicKey),
-            (x448.X448PrivateKey, x448.X448PublicKey),
+            (
+                x25519.X25519PrivateKey,
+                x25519.X25519PublicKey,
+                PublicKeyAlgorithmOID.X25519,
+            ),
+            (
+                x448.X448PrivateKey,
+                x448.X448PublicKey,
+                PublicKeyAlgorithmOID.X448,
+            ),
         ],
     )
     def test_build_cert_with_public_x25519_x448_rsa_sig(
@@ -3672,6 +3878,7 @@ class TestCertificateBuilder:
         rsa_key_2048: rsa.RSAPrivateKey,
         priv_key_cls,
         pub_key_cls,
+        pub_key_oid,
         backend,
     ):
         issuer_private_key = rsa_key_2048
@@ -3707,6 +3914,7 @@ class TestCertificateBuilder:
         )
         assert isinstance(cert.signature_hash_algorithm, hashes.SHA256)
         assert isinstance(cert.public_key(), pub_key_cls)
+        assert cert.public_key_algorithm_oid == pub_key_oid
 
     def test_build_cert_with_rsa_key_too_small(
         self, rsa_key_512: rsa.RSAPrivateKey, backend
@@ -5658,6 +5866,15 @@ class TestOtherCertificate:
                 x509.load_pem_x509_certificate,
             )
 
+    def test_invalid_empty_eku(self, backend):
+        cert = _load_cert(
+            os.path.join("x509", "custom", "empty-eku.pem"),
+            x509.load_pem_x509_certificate,
+        )
+
+        with pytest.raises(ValueError, match="InvalidSize"):
+            cert.extensions.get_extension_for_class(ExtendedKeyUsage)
+
 
 class TestNameAttribute:
     EXPECTED_TYPES: typing.ClassVar[
@@ -5729,18 +5946,25 @@ class TestNameAttribute:
 
     def test_init_none_value(self):
         with pytest.raises(TypeError):
-            x509.NameAttribute(
+            x509.NameAttribute(  # type:ignore[type-var]
                 NameOID.ORGANIZATION_NAME,
-                None,  # type:ignore[arg-type]
+                None,
             )
 
-    def test_init_bad_country_code_value(self):
+    def test_init_bad_length(self):
         with pytest.raises(ValueError):
             x509.NameAttribute(NameOID.COUNTRY_NAME, "United States")
 
         # unicode string of length 2, but > 2 bytes
         with pytest.raises(ValueError):
-            x509.NameAttribute(NameOID.COUNTRY_NAME, "\U0001F37A\U0001F37A")
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "\U0001f37a\U0001f37a")
+
+        with pytest.raises(ValueError):
+            x509.NameAttribute(NameOID.JURISDICTION_COUNTRY_NAME, "Too Long")
+        with pytest.raises(ValueError):
+            x509.NameAttribute(NameOID.COMMON_NAME, "Too Long" * 10)
+        with pytest.raises(ValueError):
+            x509.NameAttribute(NameOID.COMMON_NAME, "")
 
     def test_invalid_type(self):
         with pytest.raises(TypeError):
@@ -5786,12 +6010,12 @@ class TestNameAttribute:
         assert na.rfc4514_string() == "2.5.4.15=banking"
 
         # non-utf8 attribute (bitstring with raw bytes)
-        na = x509.NameAttribute(
+        na_bytes = x509.NameAttribute(
             x509.ObjectIdentifier("2.5.4.45"),
             b"\x01\x02\x03\x04",
             _ASN1Type.BitString,
         )
-        assert na.rfc4514_string() == "2.5.4.45=#01020304"
+        assert na_bytes.rfc4514_string() == "2.5.4.45=#01020304"
 
     def test_distinguished_name_custom_attrs(self):
         name = x509.Name(
@@ -5809,6 +6033,9 @@ class TestNameAttribute:
         assert name.rfc4514_string(
             {NameOID.COMMON_NAME: "CommonName", NameOID.EMAIL_ADDRESS: "E"}
         ) == ("CommonName=Santa Claus,E=santa@north.pole")
+
+    def test_empty_name(self):
+        assert x509.Name([]).rfc4514_string() == ""
 
     def test_empty_value(self):
         na = x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "")
@@ -5961,10 +6188,11 @@ class TestObjectIdentifier:
         x509.ObjectIdentifier("1.39.999")
         x509.ObjectIdentifier("2.5.29.3")
         x509.ObjectIdentifier("2.999.37.5.22.8")
+        x509.ObjectIdentifier(f"2.25.{2**128 - 1}")
 
     def test_oid_arc_too_large(self):
         with pytest.raises(ValueError):
-            x509.ObjectIdentifier(f"2.25.{2**128 - 1}")
+            x509.ObjectIdentifier(f"2.25.{2**128}")
 
 
 class TestName:
@@ -6177,6 +6405,7 @@ class TestEd25519Certificate:
         # self-signed, so this will work
         public_key = cert.public_key()
         assert isinstance(public_key, ed25519.Ed25519PublicKey)
+        assert cert.public_key_algorithm_oid == PublicKeyAlgorithmOID.ED25519
         public_key.verify(cert.signature, cert.tbs_certificate_bytes)
         assert isinstance(cert, x509.Certificate)
         assert cert.serial_number == 9579446940964433301
@@ -6223,6 +6452,7 @@ class TestEd448Certificate:
         # self-signed, so this will work
         public_key = cert.public_key()
         assert isinstance(public_key, ed448.Ed448PublicKey)
+        assert cert.public_key_algorithm_oid == PublicKeyAlgorithmOID.ED448
         public_key.verify(cert.signature, cert.tbs_certificate_bytes)
         assert isinstance(cert, x509.Certificate)
         assert cert.serial_number == 448
@@ -6594,6 +6824,14 @@ class TestRequestAttributes:
             x509.load_pem_x509_csr,
         )
         assert len(request.attributes) == 0
+
+    def test_zero_element_attribute(self):
+        request = _load_cert(
+            os.path.join("x509", "requests", "zero-element-attribute.pem"),
+            x509.load_pem_x509_csr,
+        )
+        with pytest.raises(ValueError, match="Only single-valued"):
+            request.attributes
 
 
 def test_load_pem_x509_certificates():

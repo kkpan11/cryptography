@@ -554,6 +554,23 @@ this without having to do the math themselves.
     Computes the ``dmq1`` parameter from the RSA private exponent (``d``) and
     prime ``q``.
 
+.. function:: rsa_recover_private_exponent(e, p, q)
+
+    .. versionadded:: 43.0.0
+
+    Computes the RSA private_exponent (``d``) given the public exponent (``e``)
+    and the RSA primes ``p`` and ``q``.
+
+    .. note::
+
+        This implementation uses the Carmichael totient function to return the
+        smallest working value of ``d``. Older RSA implementations, including the
+        original RSA paper, often used the Euler totient function, which results
+        in larger but equally functional private exponents. The private exponents
+        resulting from the Carmichael totient function, as returned here, are
+        slightly more computationally efficient to use, and some modern standards
+        require them.
+
 .. function:: rsa_recover_prime_factors(n, e, d)
 
     .. versionadded:: 0.8
@@ -620,7 +637,8 @@ Key interfaces
         Sign one block of data which can be verified later by others using the
         public key.
 
-        :param bytes data: The message string to sign.
+        :param data: The message string to sign.
+        :type data: :term:`bytes-like`
 
         :param padding: An instance of
             :class:`~cryptography.hazmat.primitives.asymmetric.padding.AsymmetricPadding`.
@@ -739,9 +757,11 @@ Key interfaces
         Verify one block of data was signed by the private key
         associated with this public key.
 
-        :param bytes signature: The signature to verify.
+        :param signature: The signature to verify.
+        :type signature: :term:`bytes-like`
 
-        :param bytes data: The message string that was signed.
+        :param data: The message string that was signed.
+        :type data: :term:`bytes-like`
 
         :param padding: An instance of
             :class:`~cryptography.hazmat.primitives.asymmetric.padding.AsymmetricPadding`.

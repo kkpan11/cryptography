@@ -7,17 +7,17 @@ use crate::buf::CffiBuf;
 use crate::error::{CryptographyError, CryptographyResult};
 use crate::exceptions;
 
-#[pyo3::prelude::pyclass(frozen, module = "cryptography.hazmat.bindings._rust.openssl.ed448")]
+#[pyo3::pyclass(frozen, module = "cryptography.hazmat.bindings._rust.openssl.ed448")]
 pub(crate) struct Ed448PrivateKey {
     pkey: openssl::pkey::PKey<openssl::pkey::Private>,
 }
 
-#[pyo3::prelude::pyclass(frozen, module = "cryptography.hazmat.bindings._rust.openssl.ed448")]
+#[pyo3::pyclass(frozen, module = "cryptography.hazmat.bindings._rust.openssl.ed448")]
 pub(crate) struct Ed448PublicKey {
     pkey: openssl::pkey::PKey<openssl::pkey::Public>,
 }
 
-#[pyo3::prelude::pyfunction]
+#[pyo3::pyfunction]
 fn generate_key() -> CryptographyResult<Ed448PrivateKey> {
     Ok(Ed448PrivateKey {
         pkey: openssl::pkey::PKey::generate_ed448()?,
@@ -40,17 +40,17 @@ pub(crate) fn public_key_from_pkey(
     }
 }
 
-#[pyo3::prelude::pyfunction]
+#[pyo3::pyfunction]
 fn from_private_bytes(data: CffiBuf<'_>) -> pyo3::PyResult<Ed448PrivateKey> {
     let pkey =
         openssl::pkey::PKey::private_key_from_raw_bytes(data.as_bytes(), openssl::pkey::Id::ED448)
             .map_err(|_| {
-                pyo3::exceptions::PyValueError::new_err("An Ed448 private key is 56 bytes long")
+                pyo3::exceptions::PyValueError::new_err("An Ed448 private key is 57 bytes long")
             })?;
     Ok(Ed448PrivateKey { pkey })
 }
 
-#[pyo3::prelude::pyfunction]
+#[pyo3::pyfunction]
 fn from_public_bytes(data: &[u8]) -> pyo3::PyResult<Ed448PublicKey> {
     let pkey = openssl::pkey::PKey::public_key_from_raw_bytes(data, openssl::pkey::Id::ED448)
         .map_err(|_| {
@@ -59,17 +59,18 @@ fn from_public_bytes(data: &[u8]) -> pyo3::PyResult<Ed448PublicKey> {
     Ok(Ed448PublicKey { pkey })
 }
 
-#[pyo3::prelude::pymethods]
+#[pyo3::pymethods]
 impl Ed448PrivateKey {
     fn sign<'p>(
         &self,
         py: pyo3::Python<'p>,
-        data: &[u8],
-    ) -> CryptographyResult<&'p pyo3::types::PyBytes> {
+        data: CffiBuf<'_>,
+    ) -> CryptographyResult<pyo3::Bound<'p, pyo3::types::PyBytes>> {
         let mut signer = openssl::sign::Signer::new_without_digest(&self.pkey)?;
-        Ok(pyo3::types::PyBytes::new_with(py, signer.len()?, |b| {
+        let len = signer.len()?;
+        Ok(pyo3::types::PyBytes::new_with(py, len, |b| {
             let n = signer
-                .sign_oneshot(b, data)
+                .sign_oneshot(b, data.as_bytes())
                 .map_err(CryptographyError::from)?;
             assert_eq!(n, b.len());
             Ok(())
@@ -89,18 +90,18 @@ impl Ed448PrivateKey {
     fn private_bytes_raw<'p>(
         &self,
         py: pyo3::Python<'p>,
-    ) -> CryptographyResult<&'p pyo3::types::PyBytes> {
+    ) -> CryptographyResult<pyo3::Bound<'p, pyo3::types::PyBytes>> {
         let raw_bytes = self.pkey.raw_private_key()?;
         Ok(pyo3::types::PyBytes::new(py, &raw_bytes))
     }
 
     fn private_bytes<'p>(
-        slf: &pyo3::PyCell<Self>,
+        slf: &pyo3::Bound<'p, Self>,
         py: pyo3::Python<'p>,
-        encoding: &pyo3::PyAny,
-        format: &pyo3::PyAny,
-        encryption_algorithm: &pyo3::PyAny,
-    ) -> CryptographyResult<&'p pyo3::types::PyBytes> {
+        encoding: &pyo3::Bound<'p, pyo3::PyAny>,
+        format: &pyo3::Bound<'p, pyo3::PyAny>,
+        encryption_algorithm: &pyo3::Bound<'p, pyo3::PyAny>,
+    ) -> CryptographyResult<pyo3::Bound<'p, pyo3::types::PyBytes>> {
         utils::pkey_private_bytes(
             py,
             slf,
@@ -112,13 +113,17 @@ impl Ed448PrivateKey {
             true,
         )
     }
+
+    fn __copy__(slf: pyo3::PyRef<'_, Self>) -> pyo3::PyRef<'_, Self> {
+        slf
+    }
 }
 
-#[pyo3::prelude::pymethods]
+#[pyo3::pymethods]
 impl Ed448PublicKey {
-    fn verify(&self, signature: &[u8], data: &[u8]) -> CryptographyResult<()> {
+    fn verify(&self, signature: CffiBuf<'_>, data: CffiBuf<'_>) -> CryptographyResult<()> {
         let valid = openssl::sign::Verifier::new_without_digest(&self.pkey)?
-            .verify_oneshot(signature, data)?;
+            .verify_oneshot(signature.as_bytes(), data.as_bytes())?;
 
         if !valid {
             return Err(CryptographyError::from(
@@ -132,17 +137,17 @@ impl Ed448PublicKey {
     fn public_bytes_raw<'p>(
         &self,
         py: pyo3::Python<'p>,
-    ) -> CryptographyResult<&'p pyo3::types::PyBytes> {
+    ) -> CryptographyResult<pyo3::Bound<'p, pyo3::types::PyBytes>> {
         let raw_bytes = self.pkey.raw_public_key()?;
         Ok(pyo3::types::PyBytes::new(py, &raw_bytes))
     }
 
     fn public_bytes<'p>(
-        slf: &pyo3::PyCell<Self>,
+        slf: &pyo3::Bound<'p, Self>,
         py: pyo3::Python<'p>,
-        encoding: &pyo3::PyAny,
-        format: &pyo3::PyAny,
-    ) -> CryptographyResult<&'p pyo3::types::PyBytes> {
+        encoding: &pyo3::Bound<'p, pyo3::PyAny>,
+        format: &pyo3::Bound<'p, pyo3::PyAny>,
+    ) -> CryptographyResult<pyo3::Bound<'p, pyo3::types::PyBytes>> {
         utils::pkey_public_bytes(py, slf, &slf.borrow().pkey, encoding, format, true, true)
     }
 
@@ -155,14 +160,10 @@ impl Ed448PublicKey {
     }
 }
 
-pub(crate) fn create_module(py: pyo3::Python<'_>) -> pyo3::PyResult<&pyo3::prelude::PyModule> {
-    let m = pyo3::prelude::PyModule::new(py, "ed448")?;
-    m.add_function(pyo3::wrap_pyfunction!(generate_key, m)?)?;
-    m.add_function(pyo3::wrap_pyfunction!(from_private_bytes, m)?)?;
-    m.add_function(pyo3::wrap_pyfunction!(from_public_bytes, m)?)?;
-
-    m.add_class::<Ed448PrivateKey>()?;
-    m.add_class::<Ed448PublicKey>()?;
-
-    Ok(m)
+#[pyo3::pymodule]
+pub(crate) mod ed448 {
+    #[pymodule_export]
+    use super::{
+        from_private_bytes, from_public_bytes, generate_key, Ed448PrivateKey, Ed448PublicKey,
+    };
 }

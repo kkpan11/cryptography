@@ -16,6 +16,9 @@ from cryptography.exceptions import (
     InvalidTag,
     NotYetFinalized,
 )
+from cryptography.hazmat.decrepit.ciphers import (
+    algorithms as decrepit_algorithms,
+)
 from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.ciphers import (
@@ -430,15 +433,15 @@ def _kbkdf_cmac_counter_mode_test(backend, prf, ctr_loc, brk_loc, params):
         "cmac_aes128": algorithms.AES,
         "cmac_aes192": algorithms.AES,
         "cmac_aes256": algorithms.AES,
-        "cmac_tdes2": algorithms.TripleDES,
-        "cmac_tdes3": algorithms.TripleDES,
+        "cmac_tdes2": decrepit_algorithms.TripleDES,
+        "cmac_tdes3": decrepit_algorithms.TripleDES,
     }
 
     algorithm = supported_cipher_algorithms.get(prf)
     assert algorithm is not None
 
     # TripleDES is disallowed in FIPS mode.
-    if backend._fips_enabled and algorithm is algorithms.TripleDES:
+    if backend._fips_enabled and algorithm is decrepit_algorithms.TripleDES:
         pytest.skip("TripleDES is not supported in FIPS mode.")
 
     ctrkdf = KBKDFCMAC(
@@ -519,13 +522,42 @@ def rsa_verification_test(backend, params, hash_alg, pad_factory):
         public_key.verify(signature, msg, pad, hash_alg)
 
 
+def _rsa_recover_euler_private_exponent(e: int, p: int, q: int) -> int:
+    """
+    Compute the RSA private_exponent (d) given the public exponent (e)
+    and the RSA primes p and q, following the usage of the original
+    RSA paper.
+
+    As in the original RSA paper, this uses the Euler totient function
+    instead of the Carmichael totient function, and thus may generate a
+    larger value of the private exponent than necessary.
+
+    See cryptography.hazmat.primitives.asymmetric.rsa_recover_private_exponent
+    for the public-facing version of this function, which uses the
+    preferred Carmichael totient function.
+    """
+    phi_n = (p - 1) * (q - 1)
+    return rsa._modinv(e, phi_n)
+
+
 def _check_rsa_private_numbers(skey):
     assert skey
     pkey = skey.public_numbers
     assert pkey
     assert pkey.e
     assert pkey.n
-    assert skey.d
+
+    # Historically there have been two ways to calculate valid values of the
+    # private_exponent (d) given the public exponent (e):
+    # - using the Carmichael totient function (gives smaller and more
+    #   computationally-efficient values, and is required by some standards)
+    # - using the Euler totient function (matching the original RSA paper)
+    # Allow for either here.
+    assert skey.d in (
+        rsa.rsa_recover_private_exponent(pkey.e, skey.p, skey.q),
+        _rsa_recover_euler_private_exponent(pkey.e, skey.p, skey.q),
+    )
+
     assert skey.p * skey.q == pkey.n
     assert skey.dmp1 == rsa.rsa_crt_dmp1(skey.d, skey.p)
     assert skey.dmq1 == rsa.rsa_crt_dmq1(skey.d, skey.q)

@@ -2,42 +2,37 @@
 // 2.0, and the BSD License. See the LICENSE file in the root of this repository
 // for complete details.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use cryptography_x509::certificate::Certificate;
 use cryptography_x509::name::Name;
 
+use crate::{CryptoOps, VerificationCertificate};
+
 /// A `Store` represents the core state needed for X.509 path validation.
-pub struct Store<'a> {
-    certs: HashSet<Certificate<'a>>,
-    by_subject: HashMap<Name<'a>, Vec<Certificate<'a>>>,
+pub struct Store<'a, B: CryptoOps> {
+    by_subject: HashMap<Name<'a>, Vec<VerificationCertificate<'a, B>>>,
 }
 
-impl<'a> Store<'a> {
+impl<'a, B: CryptoOps> Store<'a, B> {
     /// Create a new `Store` from the given iterable certificate source.
-    pub fn new(trusted: impl IntoIterator<Item = Certificate<'a>>) -> Self {
-        let certs = HashSet::from_iter(trusted);
-        let mut by_subject: HashMap<Name<'a>, Vec<Certificate<'a>>> = HashMap::new();
-        for cert in certs.iter() {
+    pub fn new(trusted: impl IntoIterator<Item = VerificationCertificate<'a, B>>) -> Self {
+        let mut by_subject: HashMap<Name<'a>, Vec<VerificationCertificate<'a, B>>> = HashMap::new();
+        for cert in trusted {
             by_subject
-                .entry(cert.tbs_cert.subject.clone())
+                .entry(cert.certificate().tbs_cert.subject.clone())
                 .or_default()
-                .push(cert.clone());
+                .push(cert);
         }
-        Store { certs, by_subject }
+        Store { by_subject }
     }
 
     /// Returns whether this store contains the given certificate.
-    pub fn contains(&self, cert: &Certificate<'a>) -> bool {
-        self.certs.contains(cert)
+    pub fn contains(&self, cert: &VerificationCertificate<'a, B>) -> bool {
+        self.get_by_subject(&cert.certificate().tbs_cert.subject)
+            .contains(cert)
     }
 
-    /// Returns an iterator over all certificates in this store.
-    pub fn iter(&self) -> impl Iterator<Item = &Certificate<'a>> {
-        self.certs.iter()
-    }
-
-    pub fn get_by_subject(&self, subject: &Name<'a>) -> &[Certificate<'a>] {
+    pub fn get_by_subject(&self, subject: &Name<'a>) -> &[VerificationCertificate<'a, B>] {
         self.by_subject
             .get(subject)
             .map(|v| v.as_slice())
@@ -47,17 +42,20 @@ impl<'a> Store<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ops::tests::{cert, v1_cert_pem};
-
     use super::Store;
+    use crate::certificate::tests::PublicKeyErrorOps;
+    use crate::ops::tests::{cert, v1_cert_pem};
+    use crate::VerificationCertificate;
 
     #[test]
     fn test_store() {
         let cert_pem = v1_cert_pem();
-        let cert = cert(&cert_pem);
-        let store = Store::new([cert.clone()]);
+        let c1 = cert(&cert_pem);
+        let c2 = cert(&cert_pem);
+        let cert1 = VerificationCertificate::new(&c1, ());
+        let cert2 = VerificationCertificate::new(&c2, ());
+        let store = Store::<'_, PublicKeyErrorOps>::new([cert1]);
 
-        assert!(store.contains(&cert));
-        assert!(store.iter().collect::<Vec<_>>() == [&cert]);
+        assert!(store.contains(&cert2));
     }
 }

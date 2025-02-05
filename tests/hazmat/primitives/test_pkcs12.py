@@ -3,14 +3,15 @@
 # for complete details.
 
 
+import contextlib
 import os
+import typing
 from datetime import datetime, timezone
 
 import pytest
 
 from cryptography import x509
-from cryptography.exceptions import UnsupportedAlgorithm
-from cryptography.hazmat.backends.openssl.backend import _RC2
+from cryptography.hazmat.decrepit.ciphers.algorithms import RC2
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import (
     dsa,
@@ -19,6 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import (
     ed25519,
     rsa,
 )
+from cryptography.hazmat.primitives.ciphers.modes import CBC
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
@@ -81,13 +83,21 @@ class TestPKCS12Loading:
         ],
     )
     @pytest.mark.supported(
-        only_if=lambda backend: backend.cipher_supported(_RC2(), None),
+        only_if=lambda backend: backend.cipher_supported(
+            RC2(b"0" * 16), CBC(b"0" * 8)
+        ),
         skip_message="Does not support RC2",
     )
     def test_load_pkcs12_ec_keys_rc2(self, filename, password, backend):
-        self._test_load_pkcs12_ec_keys(filename, password, backend)
+        if filename == "no-password.p12":
+            ctx: typing.Any = pytest.warns(UserWarning)
+        else:
+            ctx = contextlib.nullcontext()
 
-    def test_load_pkcs12_cert_only(self, backend):
+        with ctx:
+            self._test_load_pkcs12_ec_keys(filename, password, backend)
+
+    def test_load_key_and_cert_cert_only(self, backend):
         cert, _ = _load_ca(backend)
         parsed_key, parsed_cert, parsed_more_certs = load_vectors_from_file(
             os.path.join("pkcs12", "cert-aes256cbc-no-key.p12"),
@@ -100,7 +110,7 @@ class TestPKCS12Loading:
         assert parsed_key is None
         assert parsed_more_certs == [cert]
 
-    def test_load_pkcs12_key_only(self, backend):
+    def test_load_key_and_certificates_key_only(self, backend):
         _, key = _load_ca(backend)
         assert isinstance(key, ec.EllipticCurvePrivateKey)
         parsed_key, parsed_cert, parsed_more_certs = load_vectors_from_file(
@@ -114,6 +124,19 @@ class TestPKCS12Loading:
         assert parsed_key.private_numbers() == key.private_numbers()
         assert parsed_cert is None
         assert parsed_more_certs == []
+
+    def test_load_pkcs12_key_only(self, backend):
+        _, key = _load_ca(backend)
+        assert isinstance(key, ec.EllipticCurvePrivateKey)
+        p12 = load_vectors_from_file(
+            os.path.join("pkcs12", "no-cert-key-aes256cbc.p12"),
+            lambda data: load_pkcs12(data.read(), b"cryptography", backend),
+            mode="rb",
+        )
+        assert isinstance(p12.key, ec.EllipticCurvePrivateKey)
+        assert p12.key.private_numbers() == key.private_numbers()
+        assert p12.cert is None
+        assert p12.additional_certs == []
 
     def test_non_bytes(self, backend):
         with pytest.raises(TypeError):
@@ -397,7 +420,47 @@ class TestPKCS12Creation:
 
         p12_cert = load_pkcs12(p12, None, backend)
         cas = p12_cert.additional_certs
+        assert cas[0].certificate == cert2
         assert cas[0].friendly_name == b"cert2"
+        assert cas[1].certificate == cert3
+        assert cas[1].friendly_name is None
+
+    @pytest.mark.parametrize(
+        ("encryption_algorithm", "password"),
+        [
+            (serialization.BestAvailableEncryption(b"password"), b"password"),
+            (
+                serialization.PrivateFormat.PKCS12.encryption_builder().build(
+                    b"not a password"
+                ),
+                b"not a password",
+            ),
+            (serialization.NoEncryption(), None),
+        ],
+    )
+    def test_generate_cas_friendly_names_no_key(
+        self, backend, encryption_algorithm, password
+    ):
+        cert2 = _load_cert(
+            backend, os.path.join("x509", "custom", "dsa_selfsigned_ca.pem")
+        )
+        cert3 = _load_cert(backend, os.path.join("x509", "letsencryptx3.pem"))
+        p12 = serialize_key_and_certificates(
+            None,
+            None,
+            None,
+            [
+                PKCS12Certificate(cert2, b"cert2"),
+                PKCS12Certificate(cert3, None),
+            ],
+            encryption_algorithm,
+        )
+
+        p12_cert = load_pkcs12(p12, password, backend)
+        cas = p12_cert.additional_certs
+        assert cas[0].certificate == cert2
+        assert cas[0].friendly_name == b"cert2"
+        assert cas[1].certificate == cert3
         assert cas[1].friendly_name is None
 
     def test_generate_wrong_types(self, backend):
@@ -414,7 +477,7 @@ class TestPKCS12Creation:
         )
         with pytest.raises(TypeError) as exc:
             serialize_key_and_certificates(b"name", key, key, None, encryption)
-        assert str(exc.value) == "cert must be a certificate or None"
+        assert "object cannot be converted to 'Certificate'" in str(exc.value)
 
         with pytest.raises(TypeError) as exc:
             serialize_key_and_certificates(b"name", key, cert, None, key)
@@ -428,7 +491,9 @@ class TestPKCS12Creation:
 
         with pytest.raises(TypeError) as exc:
             serialize_key_and_certificates(None, key, cert, [key], encryption)
-        assert str(exc.value) == "all values in cas must be certificates"
+        assert "failed to extract enum CertificateOrPKCS12Certificate" in str(
+            exc.value
+        )
 
     def test_generate_no_cert(self, backend):
         _, key = _load_ca(backend)
@@ -485,6 +550,27 @@ class TestPKCS12Creation:
         assert parsed_cert is None
         assert parsed_key is None
         assert parsed_more_certs == [cert]
+
+    def test_generate_cert_only_none_cas(self, backend):
+        # Same as test_generate_cert_only, but passing None instead of an
+        # empty list for cas.
+        cert, _ = _load_ca(backend)
+        p12 = serialize_key_and_certificates(
+            None, None, cert, None, serialization.NoEncryption()
+        )
+        parsed_key, parsed_cert, parsed_more_certs = load_key_and_certificates(
+            p12, None
+        )
+        assert parsed_cert is None
+        assert parsed_key is None
+        assert parsed_more_certs == [cert]
+
+    def test_invalid_utf8_friendly_name(self, backend):
+        cert, _ = _load_ca(backend)
+        with pytest.raises(ValueError):
+            serialize_key_and_certificates(
+                b"\xc9", None, cert, None, serialization.NoEncryption()
+            )
 
     def test_must_supply_something(self):
         with pytest.raises(ValueError) as exc:
@@ -553,17 +639,6 @@ class TestPKCS12Creation:
         iters,
         iter_der,
     ):
-        if (
-            enc_alg is PBES.PBESv2SHA256AndAES256CBC
-        ) and not backend._lib.CRYPTOGRAPHY_OPENSSL_300_OR_GREATER:
-            pytest.skip("PBESv2 is not supported on OpenSSL < 3.0")
-
-        if (
-            mac_alg is not None
-            and not backend._lib.Cryptography_HAS_PKCS12_SET_MAC
-        ):
-            pytest.skip("PKCS12_set_mac is not supported (boring)")
-
         builder = serialization.PrivateFormat.PKCS12.encryption_builder()
         if enc_alg is not None:
             builder = builder.key_cert_algorithm(enc_alg)
@@ -610,52 +685,43 @@ class TestPKCS12Creation:
         )
         assert parsed_more_certs == [cacert]
 
-    @pytest.mark.supported(
-        only_if=lambda backend: (
-            not backend._lib.CRYPTOGRAPHY_OPENSSL_300_OR_GREATER
-        ),
-        skip_message="Requires OpenSSL < 3.0.0 (or Libre/Boring)",
-    )
-    @pytest.mark.parametrize(
-        ("algorithm"),
-        [
+    def test_set_mac_key_certificate_mismatch(self, backend):
+        cacert, _ = _load_ca(backend)
+        key = ec.generate_private_key(ec.SECP256R1())
+        encryption = (
             serialization.PrivateFormat.PKCS12.encryption_builder()
-            .key_cert_algorithm(PBES.PBESv2SHA256AndAES256CBC)
-            .build(b"password"),
-        ],
-    )
-    def test_key_serialization_encryption_unsupported(
-        self, algorithm, backend
-    ):
-        cacert, cakey = _load_ca(backend)
-        with pytest.raises(UnsupportedAlgorithm):
+            .hmac_hash(hashes.SHA256())
+            .build(b"password")
+        )
+
+        with pytest.raises(ValueError):
             serialize_key_and_certificates(
-                b"name", cakey, cacert, [], algorithm
+                b"name", key, cacert, [], encryption
             )
 
-    @pytest.mark.supported(
-        only_if=lambda backend: (
-            not backend._lib.Cryptography_HAS_PKCS12_SET_MAC
-        ),
-        skip_message="Requires OpenSSL without PKCS12_set_mac (boring only)",
-    )
     @pytest.mark.parametrize(
-        "algorithm",
+        "encryption_algorithm",
         [
-            serialization.PrivateFormat.PKCS12.encryption_builder()
-            .key_cert_algorithm(PBES.PBESv1SHA1And3KeyTripleDESCBC)
-            .hmac_hash(hashes.SHA256())
-            .build(b"password"),
+            serialization.NoEncryption(),
+            serialization.BestAvailableEncryption(b"password"),
         ],
     )
-    def test_key_serialization_encryption_set_mac_unsupported(
-        self, algorithm, backend
-    ):
-        cacert, cakey = _load_ca(backend)
-        with pytest.raises(UnsupportedAlgorithm):
-            serialize_key_and_certificates(
-                b"name", cakey, cacert, [], algorithm
-            )
+    def test_generate_localkeyid(self, backend, encryption_algorithm):
+        cert, key = _load_ca(backend)
+
+        p12 = serialize_key_and_certificates(
+            None, key, cert, None, encryption_algorithm
+        )
+        # Dirty, but does the trick. Should be there:
+        # * 2x if unencrypted (once for the key and once for the cert)
+        # * 1x if encrypted (the cert one is encrypted, but the key one is
+        #   plaintext)
+        count = (
+            2
+            if isinstance(encryption_algorithm, serialization.NoEncryption)
+            else 1
+        )
+        assert p12.count(cert.fingerprint(hashes.SHA1())) == count
 
 
 @pytest.mark.skip_fips(
@@ -746,7 +812,7 @@ class TestPKCS12Objects:
         assert c2a != c2b
         assert c2a != c3a
 
-        assert c2n != "test"
+        assert c2n != "test"  # type: ignore[comparison-overlap]
 
     def test_certificate_hash(self, backend):
         cert2 = _load_cert(
@@ -919,19 +985,15 @@ class TestPKCS12Objects:
         cert2 = _load_cert(
             backend, os.path.join("x509", "cryptography.io.pem")
         )
-        assert (
-            repr(
-                PKCS12KeyAndCertificates(
-                    key,
-                    PKCS12Certificate(cert, None),
-                    [PKCS12Certificate(cert2, b"name2")],
-                )
-            )
-            == "<PKCS12KeyAndCertificates(key={}, cert=<PKCS12Certificate("
-            "{}, friendly_name=None)>, additional_certs=[<PKCS12Certificate"
-            "({}, friendly_name=b'name2')>])>".format(
+        assert repr(
+            PKCS12KeyAndCertificates(
                 key,
-                cert,
-                cert2,
+                PKCS12Certificate(cert, None),
+                [PKCS12Certificate(cert2, b"name2")],
             )
+        ) == (
+            f"<PKCS12KeyAndCertificates(key={key}, "
+            f"cert=<PKCS12Certificate({cert}, friendly_name=None)>, "
+            f"additional_certs=["
+            f"<PKCS12Certificate({cert2}, friendly_name=b'name2')>])>"
         )

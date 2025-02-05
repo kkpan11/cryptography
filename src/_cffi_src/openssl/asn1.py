@@ -22,15 +22,9 @@ struct asn1_string_st {
 
 typedef struct asn1_string_st ASN1_OCTET_STRING;
 typedef struct asn1_string_st ASN1_IA5STRING;
-typedef struct asn1_string_st ASN1_BIT_STRING;
 typedef struct asn1_string_st ASN1_TIME;
 typedef ... ASN1_OBJECT;
 typedef struct asn1_string_st ASN1_STRING;
-typedef struct asn1_string_st ASN1_UTF8STRING;
-typedef struct {
-    int type;
-    ...;
-} ASN1_TYPE;
 typedef ... ASN1_GENERALIZEDTIME;
 typedef ... ASN1_ENUMERATED;
 
@@ -45,7 +39,6 @@ const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *);
 
 /*  ASN1 INTEGER */
 void ASN1_INTEGER_free(ASN1_INTEGER *);
-int ASN1_INTEGER_set(ASN1_INTEGER *, long);
 
 /*  ASN1 TIME */
 ASN1_TIME *ASN1_TIME_new(void);
@@ -54,11 +47,6 @@ int ASN1_TIME_set_string(ASN1_TIME *, const char *);
 
 /*  ASN1 GENERALIZEDTIME */
 void ASN1_GENERALIZEDTIME_free(ASN1_GENERALIZEDTIME *);
-
-/*  ASN1 ENUMERATED */
-ASN1_ENUMERATED *ASN1_ENUMERATED_new(void);
-void ASN1_ENUMERATED_free(ASN1_ENUMERATED *);
-int ASN1_ENUMERATED_set(ASN1_ENUMERATED *, long);
 
 int ASN1_STRING_type(const ASN1_STRING *);
 int ASN1_STRING_to_UTF8(unsigned char **, const ASN1_STRING *);

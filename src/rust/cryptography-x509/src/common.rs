@@ -2,8 +2,9 @@
 // 2.0, and the BSD License. See the LICENSE file in the root of this repository
 // for complete details.
 
-use crate::oid;
 use asn1::Asn1DefinedByWritable;
+
+use crate::oid;
 
 #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Hash, Clone, Eq, Debug)]
 pub struct AlgorithmIdentifier<'a> {
@@ -43,6 +44,11 @@ pub enum AlgorithmParameters<'a> {
     Ed25519,
     #[defined_by(oid::ED448_OID)]
     Ed448,
+
+    #[defined_by(oid::X25519_OID)]
+    X25519,
+    #[defined_by(oid::X448_OID)]
+    X448,
 
     // These encodings are only used in SPKI AlgorithmIdentifiers.
     #[defined_by(oid::EC_OID)]
@@ -102,6 +108,9 @@ pub enum AlgorithmParameters<'a> {
     #[defined_by(oid::RSASSA_PSS_OID)]
     RsaPss(Option<Box<RsaPssParameters<'a>>>),
 
+    #[defined_by(oid::DSA_OID)]
+    Dsa(DssParams<'a>),
+
     #[defined_by(oid::DSA_WITH_SHA224_OID)]
     DsaWithSha224(Option<asn1::Null>),
     #[defined_by(oid::DSA_WITH_SHA256_OID)]
@@ -110,6 +119,49 @@ pub enum AlgorithmParameters<'a> {
     DsaWithSha384(Option<asn1::Null>),
     #[defined_by(oid::DSA_WITH_SHA512_OID)]
     DsaWithSha512(Option<asn1::Null>),
+
+    #[defined_by(oid::DH_OID)]
+    Dh(DHXParams<'a>),
+    #[defined_by(oid::DH_KEY_AGREEMENT_OID)]
+    DhKeyAgreement(BasicDHParams<'a>),
+
+    #[defined_by(oid::PBES2_OID)]
+    Pbes2(PBES2Params<'a>),
+
+    #[defined_by(oid::PBKDF2_OID)]
+    Pbkdf2(PBKDF2Params<'a>),
+
+    #[defined_by(oid::HMAC_WITH_SHA1_OID)]
+    HmacWithSha1(Option<asn1::Null>),
+    #[defined_by(oid::HMAC_WITH_SHA224_OID)]
+    HmacWithSha224(Option<asn1::Null>),
+    #[defined_by(oid::HMAC_WITH_SHA256_OID)]
+    HmacWithSha256(Option<asn1::Null>),
+    #[defined_by(oid::HMAC_WITH_SHA384_OID)]
+    HmacWithSha384(Option<asn1::Null>),
+    #[defined_by(oid::HMAC_WITH_SHA512_OID)]
+    HmacWithSha512(Option<asn1::Null>),
+
+    // Used only in PKCS#7 AlgorithmIdentifiers
+    // https://datatracker.ietf.org/doc/html/rfc3565#section-4.1
+    //
+    // From RFC 3565 section 4.1:
+    // The AlgorithmIdentifier parameters field MUST be present, and the
+    // parameters field MUST contain a AES-IV:
+    //
+    // AES-IV ::= OCTET STRING (SIZE(16))
+    #[defined_by(oid::AES_128_CBC_OID)]
+    Aes128Cbc([u8; 16]),
+    #[defined_by(oid::AES_256_CBC_OID)]
+    Aes256Cbc([u8; 16]),
+
+    #[defined_by(oid::DES_EDE3_CBC_OID)]
+    DesEde3Cbc([u8; 8]),
+
+    #[defined_by(oid::PBES1_WITH_SHA_AND_3KEY_TRIPLEDES_CBC)]
+    Pbes1WithShaAnd3KeyTripleDesCbc(PBES1Params),
+    #[defined_by(oid::PBES1_WITH_SHA_AND_40_BIT_RC2_CBC)]
+    Pbe1WithShaAnd40BitRc2Cbc(PBES1Params),
 
     #[default]
     Other(asn1::ObjectIdentifier, Option<asn1::Tlv<'a>>),
@@ -157,7 +209,7 @@ impl<'a> asn1::Asn1Readable<'a> for RawTlv<'a> {
         true
     }
 }
-impl<'a> asn1::Asn1Writable for RawTlv<'a> {
+impl asn1::Asn1Writable for RawTlv<'_> {
     fn write(&self, w: &mut asn1::Writer<'_>) -> asn1::WriteResult {
         w.write_tlv(self.tag, move |dest| dest.push_slice(self.value))
     }
@@ -166,7 +218,7 @@ impl<'a> asn1::Asn1Writable for RawTlv<'a> {
 #[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Eq, Hash, Clone)]
 pub enum Time {
     UtcTime(asn1::UtcTime),
-    GeneralizedTime(asn1::GeneralizedTime),
+    GeneralizedTime(asn1::X509GeneralizedTime),
 }
 
 impl Time {
@@ -222,6 +274,42 @@ impl<T: asn1::SimpleAsn1Writable, U: asn1::SimpleAsn1Writable> asn1::SimpleAsn1W
     }
 }
 
+pub trait Asn1Operation {
+    type SequenceOfVec<'a, T>
+    where
+        T: 'a;
+    type SetOfVec<'a, T>
+    where
+        T: 'a;
+    type OwnedBitString<'a>;
+}
+
+pub struct Asn1Read;
+pub struct Asn1Write;
+
+impl Asn1Operation for Asn1Read {
+    type SequenceOfVec<'a, T>
+        = asn1::SequenceOf<'a, T>
+    where
+        T: 'a;
+    type SetOfVec<'a, T>
+        = asn1::SetOf<'a, T>
+    where
+        T: 'a;
+    type OwnedBitString<'a> = asn1::BitString<'a>;
+}
+impl Asn1Operation for Asn1Write {
+    type SequenceOfVec<'a, T>
+        = asn1::SequenceOfWriter<'a, T, Vec<T>>
+    where
+        T: 'a;
+    type SetOfVec<'a, T>
+        = asn1::SetOfWriter<'a, T, Vec<T>>
+    where
+        T: 'a;
+    type OwnedBitString<'a> = asn1::OwnedBitString;
+}
+
 #[derive(asn1::Asn1Read, asn1::Asn1Write)]
 pub struct DssSignature<'a> {
     pub r: asn1::BigUint<'a>,
@@ -234,6 +322,38 @@ pub struct DHParams<'a> {
     pub g: asn1::BigUint<'a>,
     pub q: Option<asn1::BigUint<'a>>,
 }
+
+// From PKCS#3 Section 9
+// DHParameter ::= SEQUENCE {
+//     prime INTEGER, -- p
+//     base INTEGER, -- g
+//     privateValueLength INTEGER OPTIONAL
+// }
+#[derive(asn1::Asn1Read, asn1::Asn1Write, Clone, PartialEq, Eq, Debug, Hash)]
+pub struct BasicDHParams<'a> {
+    pub p: asn1::BigUint<'a>,
+    pub g: asn1::BigUint<'a>,
+    pub private_value_length: Option<u32>,
+}
+
+// From https://www.rfc-editor.org/rfc/rfc3279#section-2.3.3
+// DomainParameters ::= SEQUENCE {
+//     p       INTEGER, -- odd prime, p=jq +1
+//     g       INTEGER, -- generator, g
+//     q       INTEGER, -- factor of p-1
+//     j       INTEGER OPTIONAL, -- subgroup factor
+//     validationParms  ValidationParms OPTIONAL
+// }
+#[derive(asn1::Asn1Read, asn1::Asn1Write, Clone, PartialEq, Eq, Debug, Hash)]
+pub struct DHXParams<'a> {
+    pub p: asn1::BigUint<'a>,
+    pub g: asn1::BigUint<'a>,
+    pub q: asn1::BigUint<'a>,
+    pub j: Option<asn1::BigUint<'a>>,
+    // No support for this, so don't bother filling out the fields.
+    pub validation_params: Option<asn1::Sequence<'a>>,
+}
+
 // RSA-PSS ASN.1 default hash algorithm
 pub const PSS_SHA1_HASH_ALG: AlgorithmIdentifier<'_> = AlgorithmIdentifier {
     oid: asn1::DefinedByMarker::marker(),
@@ -321,9 +441,60 @@ pub struct RsaPssParameters<'a> {
     #[explicit(2)]
     #[default(20u16)]
     pub salt_length: u16,
+    // While the RFC describes this field as `DEFAULT 1`, it also states that
+    // parsers must accept this field being encoded with a value of 1, in
+    // conflict with DER's requirement that field DEFAULT values not be
+    // encoded. Thus we just treat this as an optional field.
+    //
+    // Users of this struct should supply `None` to indicate the DEFAULT value
+    // of 1, or `Some` to indicate a different value. Note that if you supply
+    // `Some(1)` this will result in encoding a violation of the DER rules,
+    // thus this should never be done except to round-trip an existing
+    // structure.
     #[explicit(3)]
-    #[default(1u8)]
-    pub _trailer_field: u8,
+    pub _trailer_field: Option<u8>,
+}
+
+// https://datatracker.ietf.org/doc/html/rfc3279#section-2.3.2
+//
+// Dss-Parms ::= SEQUENCE  {
+//     p  INTEGER,
+//     q  INTEGER,
+//     g  INTEGER
+// }
+#[derive(asn1::Asn1Read, asn1::Asn1Write, Hash, Clone, PartialEq, Eq, Debug)]
+pub struct DssParams<'a> {
+    pub p: asn1::BigUint<'a>,
+    pub q: asn1::BigUint<'a>,
+    pub g: asn1::BigUint<'a>,
+}
+
+#[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Eq, Hash, Clone, Debug)]
+pub struct PBES2Params<'a> {
+    pub key_derivation_func: Box<AlgorithmIdentifier<'a>>,
+    pub encryption_scheme: Box<AlgorithmIdentifier<'a>>,
+}
+
+const HMAC_SHA1_ALG: AlgorithmIdentifier<'static> = AlgorithmIdentifier {
+    oid: asn1::DefinedByMarker::marker(),
+    params: AlgorithmParameters::HmacWithSha1(Some(())),
+};
+
+#[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Eq, Hash, Clone, Debug)]
+pub struct PBKDF2Params<'a> {
+    // This is technically a CHOICE that can be an otherSource. We don't
+    // support that.
+    pub salt: &'a [u8],
+    pub iteration_count: u64,
+    pub key_length: Option<u64>,
+    #[default(HMAC_SHA1_ALG)]
+    pub prf: Box<AlgorithmIdentifier<'a>>,
+}
+
+#[derive(asn1::Asn1Read, asn1::Asn1Write, PartialEq, Eq, Hash, Clone, Debug)]
+pub struct PBES1Params {
+    pub salt: [u8; 8],
+    pub iterations: u64,
 }
 
 /// A VisibleString ASN.1 element whose contents is not validated as meeting the
@@ -347,17 +518,89 @@ impl<'a> asn1::SimpleAsn1Readable<'a> for UnvalidatedVisibleString<'a> {
     }
 }
 
-impl<'a> asn1::SimpleAsn1Writable for UnvalidatedVisibleString<'a> {
+impl asn1::SimpleAsn1Writable for UnvalidatedVisibleString<'_> {
     const TAG: asn1::Tag = asn1::VisibleString::TAG;
     fn write_data(&self, _: &mut asn1::WriteBuf) -> asn1::WriteResult {
         unimplemented!();
     }
 }
 
+/// A BMPString ASN.1 element, where it is stored as a UTF-8 string in memory.
+pub struct Utf8StoredBMPString<'a>(pub &'a str);
+
+impl<'a> Utf8StoredBMPString<'a> {
+    pub fn new(s: &'a str) -> Self {
+        Utf8StoredBMPString(s)
+    }
+}
+
+impl asn1::SimpleAsn1Writable for Utf8StoredBMPString<'_> {
+    const TAG: asn1::Tag = asn1::BMPString::TAG;
+    fn write_data(&self, writer: &mut asn1::WriteBuf) -> asn1::WriteResult {
+        for ch in self.0.encode_utf16() {
+            writer.push_slice(&ch.to_be_bytes())?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct WithTlv<'a, T> {
+    tlv: asn1::Tlv<'a>,
+    value: T,
+}
+
+impl<'a, T> WithTlv<'a, T> {
+    pub fn tlv(&self) -> &asn1::Tlv<'a> {
+        &self.tlv
+    }
+}
+
+impl<T> std::ops::Deref for WithTlv<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<'a, T: asn1::Asn1Readable<'a>> asn1::Asn1Readable<'a> for WithTlv<'a, T> {
+    fn parse(p: &mut asn1::Parser<'a>) -> asn1::ParseResult<Self> {
+        let tlv = p.read_element::<asn1::Tlv<'a>>()?;
+        Ok(Self {
+            tlv,
+            value: tlv.parse()?,
+        })
+    }
+
+    fn can_parse(t: asn1::Tag) -> bool {
+        T::can_parse(t)
+    }
+}
+
+impl<T: asn1::Asn1Writable> asn1::Asn1Writable for WithTlv<'_, T> {
+    fn write(&self, w: &mut asn1::Writer<'_>) -> asn1::WriteResult<()> {
+        self.value.write(w)
+    }
+}
+
+impl<T: PartialEq> PartialEq for WithTlv<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+impl<T: Eq> Eq for WithTlv<'_, T> {}
+impl<T: std::hash::Hash> std::hash::Hash for WithTlv<'_, T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Asn1ReadableOrWritable, RawTlv, UnvalidatedVisibleString};
     use asn1::Asn1Readable;
+
+    use super::{Asn1ReadableOrWritable, RawTlv, UnvalidatedVisibleString, WithTlv};
 
     #[test]
     #[should_panic]
@@ -382,5 +625,13 @@ mod tests {
     fn test_raw_tlv_can_parse() {
         let t = asn1::Tag::from_bytes(&[0]).unwrap().0;
         assert!(RawTlv::can_parse(t));
+    }
+
+    #[test]
+    fn test_with_raw_tlv_can_parse() {
+        let t = asn1::Tag::from_bytes(&[0x30]).unwrap().0;
+
+        assert!(WithTlv::<asn1::Sequence<'_>>::can_parse(t));
+        assert!(!WithTlv::<bool>::can_parse(t));
     }
 }

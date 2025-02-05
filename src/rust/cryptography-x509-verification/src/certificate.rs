@@ -12,11 +12,10 @@ pub(crate) fn cert_is_self_issued(cert: &Certificate<'_>) -> bool {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use super::cert_is_self_issued;
     use crate::certificate::Certificate;
     use crate::ops::tests::{cert, v1_cert_pem};
     use crate::ops::CryptoOps;
-
-    use super::cert_is_self_issued;
 
     #[test]
     fn test_certificate_v1() {
@@ -55,6 +54,8 @@ Xw4nMqk=
     impl CryptoOps for PublicKeyErrorOps {
         type Key = ();
         type Err = ();
+        type CertificateExtra = ();
+        type PolicyExtra = ();
 
         fn public_key(&self, _cert: &Certificate<'_>) -> Result<Self::Key, Self::Err> {
             // Simulate failing to retrieve a public key.
@@ -64,10 +65,24 @@ Xw4nMqk=
         fn verify_signed_by(
             &self,
             _cert: &Certificate<'_>,
-            _key: Self::Key,
+            _key: &Self::Key,
         ) -> Result<(), Self::Err> {
             Ok(())
         }
+
+        fn clone_public_key(key: &Self::Key) -> Self::Key {
+            key.clone()
+        }
+
+        fn clone_extra(extra: &Self::CertificateExtra) -> Self::CertificateExtra {
+            extra.clone()
+        }
+    }
+
+    #[test]
+    fn test_clone() {
+        assert_eq!(PublicKeyErrorOps::clone_public_key(&()), ());
+        assert_eq!(PublicKeyErrorOps::clone_extra(&()), ());
     }
 
     #[test]
@@ -86,6 +101,6 @@ Xw4nMqk=
         let ops = PublicKeyErrorOps {};
 
         assert!(ops.public_key(&cert).is_err());
-        assert!(ops.verify_signed_by(&cert, ()).is_ok());
+        assert!(ops.verify_signed_by(&cert, &()).is_ok());
     }
 }

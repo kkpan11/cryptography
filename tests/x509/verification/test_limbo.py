@@ -12,7 +12,9 @@ import pytest
 from cryptography import x509
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.x509.verification import (
+    ClientVerifier,
     PolicyBuilder,
+    ServerVerifier,
     Store,
     VerificationError,
 )
@@ -27,13 +29,18 @@ LIMBO_UNSUPPORTED_FEATURES = {
     # Our support for custom EKUs is limited, and we (like most impls.) don't
     # handle all EKU conditions under CABF.
     "pedantic-webpki-eku",
-    # Similarly: contains tests that fail based on a strict reading of RFC 5280
+    # Most CABF validators do not enforce the CABF key requirements on
+    # subscriber keys (i.e., in the leaf certificate).
+    "pedantic-webpki-subscriber-key",
+    # Tests that fail based on a strict reading of RFC 5280
     # but are widely ignored by validators.
     "pedantic-rfc5280",
     # In rare circumstances, CABF relaxes RFC 5280's prescriptions in
     # incompatible ways. Our validator always tries (by default) to comply
     # closer to CABF, so we skip these.
     "rfc5280-incompatible-with-webpki",
+    # We do not support policy constraints.
+    "has-policy-constraints",
 }
 
 LIMBO_SKIP_TESTCASES = {
@@ -60,6 +67,15 @@ LIMBO_SKIP_TESTCASES = {
     # forbidden under CABF. This is consistent with what
     # Go's crypto/x509 and Rust's webpki crate do.
     "webpki::aki::root-with-aki-ski-mismatch",
+    # We allow root CAs where the AKI contains fields other than keyIdentifier,
+    # which is technically forbidden under CABF. No other implementations
+    # enforce this requirement.
+    "webpki::aki::root-with-aki-authoritycertissuer",
+    "webpki::aki::root-with-aki-authoritycertserialnumber",
+    "webpki::aki::root-with-aki-all-fields",
+    # We allow RSA keys that aren't divisible by 8, which is technically
+    # forbidden under CABF. No other implementation checks this either.
+    "webpki::forbidden-rsa-not-divisable-by-8-in-root",
     # We disallow CAs in the leaf position, which is explicitly forbidden
     # by CABF (but implicitly permitted under RFC 5280). This is consistent
     # with what webpki and rustls do, but inconsistent with Go and OpenSSL.
@@ -70,27 +86,26 @@ LIMBO_SKIP_TESTCASES = {
 
 def _get_limbo_peer(expected_peer):
     kind = expected_peer["kind"]
-    assert kind in ("DNS", "IP")
+    assert kind in ("DNS", "IP", "RFC822")
     value = expected_peer["value"]
     if kind == "DNS":
         return x509.DNSName(value)
-    else:
+    elif kind == "IP":
         return x509.IPAddress(ipaddress.ip_address(value))
+    else:
+        return x509.RFC822Name(value)
 
 
 def _limbo_testcase(id_, testcase):
     if id_ in LIMBO_SKIP_TESTCASES:
-        return
+        pytest.skip(f"explicitly skipped testcase: {id_}")
 
     features = testcase["features"]
-    if LIMBO_UNSUPPORTED_FEATURES.intersection(features):
-        return
-    assert testcase["validation_kind"] == "SERVER"
+    unsupported = LIMBO_UNSUPPORTED_FEATURES.intersection(features)
+    if unsupported:
+        pytest.skip(f"explicitly skipped features: {unsupported}")
+
     assert testcase["signature_algorithms"] == []
-    assert testcase["extended_key_usage"] == [] or testcase[
-        "extended_key_usage"
-    ] == ["serverAuth"]
-    assert testcase["expected_peer_names"] == []
 
     trusted_certs = [
         load_pem_x509_certificate(cert.encode())
@@ -103,7 +118,6 @@ def _limbo_testcase(id_, testcase):
     peer_certificate = load_pem_x509_certificate(
         testcase["peer_certificate"].encode()
     )
-    peer_name = _get_limbo_peer(testcase["expected_peer_name"])
     validation_time = testcase["validation_time"]
     validation_time = (
         datetime.datetime.fromisoformat(validation_time)
@@ -113,18 +127,45 @@ def _limbo_testcase(id_, testcase):
     max_chain_depth = testcase["max_chain_depth"]
     should_pass = testcase["expected_result"] == "SUCCESS"
 
-    verifier = (
-        PolicyBuilder()
-        .time(validation_time)
-        .store(Store(trusted_certs))
-        .max_chain_depth(max_chain_depth)
-        .build_server_verifier(peer_name)
-    )
+    builder = PolicyBuilder().store(Store(trusted_certs))
+    if validation_time is not None:
+        builder = builder.time(validation_time)
+    if max_chain_depth is not None:
+        builder = builder.max_chain_depth(max_chain_depth)
+
+    verifier: ServerVerifier | ClientVerifier
+    if testcase["validation_kind"] == "SERVER":
+        assert testcase["extended_key_usage"] == [] or testcase[
+            "extended_key_usage"
+        ] == ["serverAuth"]
+        peer_name = _get_limbo_peer(testcase["expected_peer_name"])
+        # Some tests exercise invalid leaf SANs, which get caught before
+        # validation even begins.
+        try:
+            verifier = builder.build_server_verifier(peer_name)
+        except ValueError:
+            assert not should_pass
+            return
+    else:
+        assert testcase["extended_key_usage"] == ["clientAuth"]
+        verifier = builder.build_client_verifier()
 
     if should_pass:
-        built_chain = verifier.verify(
-            peer_certificate, untrusted_intermediates
-        )
+        if isinstance(verifier, ServerVerifier):
+            built_chain = verifier.verify(
+                peer_certificate, untrusted_intermediates
+            )
+        else:
+            verified_client = verifier.verify(
+                peer_certificate, untrusted_intermediates
+            )
+
+            expected_subjects = [
+                _get_limbo_peer(p) for p in testcase["expected_peer_names"]
+            ]
+            assert expected_subjects == verified_client.subjects
+
+            built_chain = verified_client.chain
 
         # Assert that the verifier returns chains in [EE, ..., TA] order.
         assert built_chain[0] == peer_certificate

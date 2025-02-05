@@ -2,9 +2,13 @@ name: Benchmark
 on:
   pull_request:
     paths:
-      - '.github/workflows/benchmark.yml'
-      - 'src/**'
-      - 'tests/**'
+      - ".github/workflows/benchmark.yml"
+      - "src/**"
+      - "tests/**"
+  workflow_dispatch:
+    inputs:
+      base_commit:
+        description: The base commit to compare against
 
 permissions:
   contents: read
@@ -21,24 +25,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         timeout-minutes: 3
         with:
           persist-credentials: false
           path: "cryptography-pr"
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         timeout-minutes: 3
         with:
+          persist-credentials: false
           repository: "pyca/cryptography"
           path: "cryptography-base"
-          ref: "${{ github.base_ref }}"
+          ref: "${{ github.event.inputs.base_commit || github.base_ref }}"
       - name: Clone test vectors
         timeout-minutes: 2
         uses: ./cryptography-base/.github/actions/fetch-vectors
 
       - name: Setup python
         id: setup-python
-        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.11"
 
@@ -57,4 +62,4 @@ jobs:
         run: .venv-pr/bin/pytest --benchmark-enable --benchmark-only ./cryptography-pr/tests/bench/ --benchmark-json=bench-pr.json --x509-limbo-root=x509-limbo/
 
       - name: Compare results
-        run: python ./cryptography-pr/.github/compare_benchmarks.py bench-base.json bench-pr.json | tee -a $GITHUB_STEP_SUMMARY
+        run: python ./cryptography-pr/.github/bin/compare_benchmarks.py bench-base.json bench-pr.json | tee -a $GITHUB_STEP_SUMMARY

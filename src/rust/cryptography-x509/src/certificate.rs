@@ -2,12 +2,9 @@
 // 2.0, and the BSD License. See the LICENSE file in the root of this repository
 // for complete details.
 
-use crate::common;
-use crate::extensions;
-use crate::extensions::DuplicateExtensionsError;
-use crate::extensions::Extensions;
-use crate::name;
+use crate::extensions::{DuplicateExtensionsError, Extensions};
 use crate::name::NameReadable;
+use crate::{common, extensions, name};
 
 #[derive(asn1::Asn1Read, asn1::Asn1Write, Hash, PartialEq, Eq, Clone)]
 pub struct Certificate<'a> {
@@ -46,7 +43,7 @@ pub struct TbsCertificate<'a> {
     pub validity: Validity,
     pub subject: name::Name<'a>,
 
-    pub spki: common::SubjectPublicKeyInfo<'a>,
+    pub spki: common::WithTlv<'a, common::SubjectPublicKeyInfo<'a>>,
     #[implicit(1)]
     pub issuer_unique_id: Option<asn1::BitString<'a>>,
     #[implicit(2)]

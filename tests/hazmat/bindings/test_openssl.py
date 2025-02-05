@@ -8,7 +8,6 @@ from cryptography.exceptions import InternalError
 from cryptography.hazmat.bindings._rust import openssl as rust_openssl
 from cryptography.hazmat.bindings.openssl.binding import (
     Binding,
-    _legacy_provider_error,
     _openssl_assert,
     _verify_package_version,
 )
@@ -25,7 +24,7 @@ class TestOpenSSL:
         # Test that we're properly handling 32-bit unsigned on all platforms.
         b = Binding()
         # SSL_OP_ALL is 0 on BoringSSL
-        if not b.lib.CRYPTOGRAPHY_IS_BORINGSSL:
+        if not rust_openssl.CRYPTOGRAPHY_IS_BORINGSSL:
             assert b.lib.SSL_OP_ALL > 0
         ctx = b.lib.SSL_CTX_new(b.lib.TLS_method())
         assert ctx != b.ffi.NULL
@@ -40,7 +39,7 @@ class TestOpenSSL:
         # Test that we're properly handling 32-bit unsigned on all platforms.
         b = Binding()
         # SSL_OP_ALL is 0 on BoringSSL
-        if not b.lib.CRYPTOGRAPHY_IS_BORINGSSL:
+        if not rust_openssl.CRYPTOGRAPHY_IS_BORINGSSL:
             assert b.lib.SSL_OP_ALL > 0
         ctx = b.lib.SSL_CTX_new(b.lib.TLS_method())
         assert ctx != b.ffi.NULL
@@ -56,7 +55,7 @@ class TestOpenSSL:
     def test_conditional_removal(self):
         b = Binding()
 
-        if not b.lib.CRYPTOGRAPHY_IS_LIBRESSL:
+        if not rust_openssl.CRYPTOGRAPHY_IS_LIBRESSL:
             assert b.lib.TLS_ST_OK
         else:
             with pytest.raises(AttributeError):
@@ -77,18 +76,12 @@ class TestOpenSSL:
         error = exc_info.value.err_code[0]
         assert error.lib == b.lib.ERR_LIB_EVP
         assert error.reason == b.lib.EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH
-        if not b.lib.CRYPTOGRAPHY_IS_BORINGSSL:
+        if not rust_openssl.CRYPTOGRAPHY_IS_BORINGSSL:
             assert b"data not multiple of block length" in error.reason_text
 
     def test_version_mismatch(self):
         with pytest.raises(ImportError):
             _verify_package_version("nottherightversion")
-
-    def test_legacy_provider_error(self):
-        with pytest.raises(RuntimeError):
-            _legacy_provider_error(False)
-
-        _legacy_provider_error(True)
 
     def test_rust_internal_error(self):
         with pytest.raises(InternalError) as exc_info:
@@ -110,5 +103,5 @@ class TestOpenSSL:
         error = exc_info.value.err_code[0]
         assert error.lib == b.lib.ERR_LIB_EVP
         assert error.reason == b.lib.EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH
-        if not b.lib.CRYPTOGRAPHY_IS_BORINGSSL:
+        if not rust_openssl.CRYPTOGRAPHY_IS_BORINGSSL:
             assert b"data not multiple of block length" in error.reason_text

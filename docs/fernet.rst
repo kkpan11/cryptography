@@ -33,7 +33,7 @@ has support for implementing key rotation via :class:`MultiFernet`.
         Generates a fresh fernet key. Keep this some place safe! If you lose it
         you'll no longer be able to decrypt messages; if anyone else gains
         access to it, they'll be able to decrypt all of your messages, and
-        they'll also be able forge arbitrary messages that will be
+        they'll also be able to forge arbitrary messages that will be
         authenticated and decrypted.
 
     .. method:: encrypt(data)
@@ -237,7 +237,7 @@ password through a key derivation function such as
     ...     algorithm=hashes.SHA256(),
     ...     length=32,
     ...     salt=salt,
-    ...     iterations=480000,
+    ...     iterations=1_000_000,
     ... )
     >>> key = base64.urlsafe_b64encode(kdf.derive(password))
     >>> f = Fernet(key)
@@ -251,8 +251,8 @@ In this scheme, the salt has to be stored in a retrievable location in order
 to derive the same key from the password in the future.
 
 The iteration count used should be adjusted to be as high as your server can
-tolerate. A good default is at least 480,000 iterations, which is what `Django
-recommends as of December 2022`_.
+tolerate. A good default is at least 1,000,000 iterations, which is what `Django
+recommends as of January 2025`_.
 
 Implementation
 --------------
@@ -280,5 +280,5 @@ unsuitable for very large files at this time.
 
 
 .. _`Fernet`: https://github.com/fernet/spec/
-.. _`Django recommends as of December 2022`: https://github.com/django/django/blob/main/django/contrib/auth/hashers.py
+.. _`Django recommends as of January 2025`: https://github.com/django/django/blob/main/django/contrib/auth/hashers.py
 .. _`specification`: https://github.com/fernet/spec/blob/master/Spec.md

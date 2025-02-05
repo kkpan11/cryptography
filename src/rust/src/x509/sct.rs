@@ -2,11 +2,13 @@
 // 2.0, and the BSD License. See the LICENSE file in the root of this repository
 // for complete details.
 
-use crate::error::CryptographyError;
-use crate::types;
-use pyo3::ToPyObject;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+
+use pyo3::types::{PyAnyMethods, PyDictMethods, PyListMethods};
+
+use crate::error::{CryptographyError, CryptographyResult};
+use crate::types;
 
 struct TLSReader<'a> {
     data: &'a [u8],
@@ -125,7 +127,7 @@ impl TryFrom<u8> for SignatureAlgorithm {
     }
 }
 
-#[pyo3::prelude::pyclass(frozen, module = "cryptography.hazmat.bindings._rust.x509")]
+#[pyo3::pyclass(frozen, module = "cryptography.hazmat.bindings._rust.x509")]
 pub(crate) struct Sct {
     log_id: [u8; 32],
     timestamp: u64,
@@ -138,7 +140,7 @@ pub(crate) struct Sct {
     pub(crate) sct_data: Vec<u8>,
 }
 
-#[pyo3::prelude::pymethods]
+#[pyo3::pymethods]
 impl Sct {
     fn __eq__(&self, other: pyo3::PyRef<'_, Sct>) -> bool {
         self.sct_data == other.sct_data
@@ -151,7 +153,7 @@ impl Sct {
     }
 
     #[getter]
-    fn version<'p>(&self, py: pyo3::Python<'p>) -> pyo3::PyResult<&'p pyo3::PyAny> {
+    fn version<'p>(&self, py: pyo3::Python<'p>) -> pyo3::PyResult<pyo3::Bound<'p, pyo3::PyAny>> {
         types::CERTIFICATE_TRANSPARENCY_VERSION_V1.get(py)
     }
 
@@ -161,12 +163,12 @@ impl Sct {
     }
 
     #[getter]
-    fn timestamp<'p>(&self, py: pyo3::Python<'p>) -> pyo3::PyResult<&'p pyo3::PyAny> {
+    fn timestamp<'p>(&self, py: pyo3::Python<'p>) -> pyo3::PyResult<pyo3::Bound<'p, pyo3::PyAny>> {
         let utc = types::DATETIME_TIMEZONE_UTC.get(py)?;
 
         let kwargs = pyo3::types::PyDict::new(py);
         kwargs.set_item("microsecond", self.timestamp % 1000 * 1000)?;
-        kwargs.set_item("tzinfo", None::<Option<pyo3::PyAny>>)?;
+        kwargs.set_item("tzinfo", None::<Option<pyo3::PyObject>>)?;
 
         types::DATETIME_DATETIME
             .get(py)?
@@ -174,11 +176,11 @@ impl Sct {
                 pyo3::intern!(py, "fromtimestamp"),
                 (self.timestamp / 1000, utc),
             )?
-            .call_method("replace", (), Some(kwargs))
+            .call_method("replace", (), Some(&kwargs))
     }
 
     #[getter]
-    fn entry_type<'p>(&self, py: pyo3::Python<'p>) -> pyo3::PyResult<&'p pyo3::PyAny> {
+    fn entry_type<'p>(&self, py: pyo3::Python<'p>) -> pyo3::PyResult<pyo3::Bound<'p, pyo3::PyAny>> {
         Ok(match self.entry_type {
             LogEntryType::Certificate => types::LOG_ENTRY_TYPE_X509_CERTIFICATE.get(py)?,
             LogEntryType::PreCertificate => types::LOG_ENTRY_TYPE_PRE_CERTIFICATE.get(py)?,
@@ -189,14 +191,17 @@ impl Sct {
     fn signature_hash_algorithm<'p>(
         &self,
         py: pyo3::Python<'p>,
-    ) -> pyo3::PyResult<&'p pyo3::PyAny> {
+    ) -> pyo3::PyResult<pyo3::Bound<'p, pyo3::PyAny>> {
         types::HASHES_MODULE
             .get(py)?
             .call_method0(self.hash_algorithm.to_attr())
     }
 
     #[getter]
-    fn signature_algorithm<'p>(&self, py: pyo3::Python<'p>) -> pyo3::PyResult<&'p pyo3::PyAny> {
+    fn signature_algorithm<'p>(
+        &self,
+        py: pyo3::Python<'p>,
+    ) -> pyo3::PyResult<pyo3::Bound<'p, pyo3::PyAny>> {
         types::SIGNATURE_ALGORITHM
             .get(py)?
             .getattr(self.signature_algorithm.to_attr())
@@ -213,11 +218,11 @@ impl Sct {
     }
 }
 
-pub(crate) fn parse_scts(
-    py: pyo3::Python<'_>,
+pub(crate) fn parse_scts<'p>(
+    py: pyo3::Python<'p>,
     data: &[u8],
     entry_type: LogEntryType,
-) -> Result<pyo3::PyObject, CryptographyError> {
+) -> CryptographyResult<pyo3::Bound<'p, pyo3::PyAny>> {
     let mut reader = TLSReader::new(data).read_length_prefixed()?;
 
     let py_scts = pyo3::types::PyList::empty(py);
@@ -248,15 +253,9 @@ pub(crate) fn parse_scts(
             extension_bytes,
             sct_data: raw_sct_data,
         };
-        py_scts.append(pyo3::PyCell::new(py, sct)?)?;
+        py_scts.append(pyo3::Bound::new(py, sct)?)?;
     }
-    Ok(py_scts.to_object(py))
-}
-
-pub(crate) fn add_to_module(module: &pyo3::prelude::PyModule) -> pyo3::PyResult<()> {
-    module.add_class::<Sct>()?;
-
-    Ok(())
+    Ok(py_scts.into_any())
 }
 
 #[cfg(test)]

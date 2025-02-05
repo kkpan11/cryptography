@@ -2,12 +2,15 @@
 // 2.0, and the BSD License. See the LICENSE file in the root of this repository
 // for complete details.
 
-use crate::error::CryptographyResult;
-use crate::types;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-#[pyo3::prelude::pyclass(frozen, module = "cryptography.hazmat.bindings._rust")]
+use pyo3::types::PyAnyMethods;
+
+use crate::error::CryptographyResult;
+use crate::types;
+
+#[pyo3::pyclass(frozen, module = "cryptography.hazmat.bindings._rust")]
 pub(crate) struct ObjectIdentifier {
     pub(crate) oid: asn1::ObjectIdentifier,
 }
@@ -22,15 +25,15 @@ impl ObjectIdentifier {
     }
 
     #[getter]
-    fn dotted_string<'p>(&self, py: pyo3::Python<'p>) -> &'p pyo3::types::PyString {
-        pyo3::types::PyString::new(py, &self.oid.to_string())
+    fn dotted_string(&self) -> String {
+        self.oid.to_string()
     }
 
     #[getter]
     fn _name<'p>(
-        slf: pyo3::PyRef<'_, Self>,
+        slf: pyo3::PyRef<'p, Self>,
         py: pyo3::Python<'p>,
-    ) -> pyo3::PyResult<&'p pyo3::PyAny> {
+    ) -> pyo3::PyResult<pyo3::Bound<'p, pyo3::PyAny>> {
         types::OID_NAMES
             .get(py)?
             .call_method1(pyo3::intern!(py, "get"), (slf, "Unknown OID"))
@@ -40,17 +43,12 @@ impl ObjectIdentifier {
         slf
     }
 
-    fn __repr__(&self, py: pyo3::Python<'_>) -> pyo3::PyResult<String> {
-        let self_clone = pyo3::PyCell::new(
-            py,
-            ObjectIdentifier {
-                oid: self.oid.clone(),
-            },
-        )?;
-        let name = ObjectIdentifier::_name(self_clone.borrow(), py)?.extract::<&str>()?;
+    fn __repr__(slf: &pyo3::Bound<'_, Self>, py: pyo3::Python<'_>) -> pyo3::PyResult<String> {
+        let name = Self::_name(slf.borrow(), py)?;
         Ok(format!(
             "<ObjectIdentifier(oid={}, name={})>",
-            self.oid, name
+            slf.get().oid,
+            name.extract::<pyo3::pybacked::PyBackedStr>()?
         ))
     }
 

@@ -21,9 +21,6 @@ for various cryptographic algorithms. These are not included in the repository
 (or ``cryptography_vectors`` package), but rather cloned from Git in our
 continuous integration environments.
 
-We have ensured all test vectors are used as of commit
-``d9f6ec7d8bd8c96da05368999094e4a75ba5cb3d``.
-
 Asymmetric ciphers
 ~~~~~~~~~~~~~~~~~~
 
@@ -34,8 +31,6 @@ Asymmetric ciphers
 * FIPS 186-2 and FIPS 186-3 ECDSA test vectors from `NIST CAVP`_.
 * DH and ECDH and ECDH+KDF(17.4) test vectors from `NIST CAVP`_.
 * Ed25519 test vectors from the `Ed25519 website`_.
-* OpenSSL PEM RSA serialization vectors from the `OpenSSL example key`_ and
-  `GnuTLS key parsing tests`_.
 * ``asymmetric/PEM_Serialization/rsa-bad-1025-q-is-2.pem`` from `badkeys`_.
 * OpenSSL PEM DSA serialization vectors from the `GnuTLS example keys`_.
 * PKCS #8 PEM serialization vectors from
@@ -51,6 +46,24 @@ Asymmetric ciphers
 * X25519 and X448 test vectors from :rfc:`7748`.
 * RSA OAEP with custom label from the `BoringSSL evp tests`_.
 * Ed448 test vectors from :rfc:`8032`.
+* Deterministic ECDSA (:rfc:`6979`) from `OpenSSL's RFC 6979 test vectors`_.
+* ``asymmetric/PKCS8/rsa-40bitrc2.pem`` a PKCS8 encoded RSA key from GnuTLS
+  encrypted with ``pbeWithSHAAnd40BitRC2-CBC``. The password is ``baz``.
+* ``asymmetric/PKCS8/rsa-rc2-cbc.pem`` a PKCS8 encoded RSA key from GnuTLS
+  encrypted with ``RC2-CBC``. The password is ``Red Hat Enterprise Linux 7.4``.
+* ``asymmetric/PKCS8/rsa_pkcs8_pbes2_pbkdf2_2048_3des_sha224.pem`` a PKCS8
+  encoded RSA key from Mbed-TLS using ``sha224`` as the PRF for PBKDF2.
+  The password is ``PolarSSLTest``.
+* ``asymmetric/PKCS8/rsa_pkcs8_pbes2_pbkdf2_2048_3des_sha384.pem`` a PKCS8
+  encoded RSA key from Mbed-TLS using ``sha384`` as the PRF for PBKDF2.
+  The password is ``PolarSSLTest``.
+* ``asymmetric/PKCS8/rsa_pkcs8_pbes2_pbkdf2_2048_3des_sha512.pem`` a PKCS8
+  encoded RSA key from Mbed-TLS using ``sha512`` as the PRF for PBKDF2.
+  The password is ``PolarSSLTest``.
+* ``asymmetric/PKCS8/rsa-aes-192-cbc.pem`` a PKCS8 encoded RSA key from Mbed-TLS
+  encrypted with ``AES-192-CBC``. The password is ``PolarSSLTest``.
+* ``asymmetric/PKCS8/ed25519-scrypt.pem`` a PKCS8 encoded Ed25519 key from
+  RustCrypto using scrypt as the KDF. The password is ``hunter42``.
 
 
 Custom asymmetric vectors
@@ -72,12 +85,18 @@ Custom asymmetric vectors
 * ``asymmetric/PEM_Serialization/ec_public_key.pem`` and
   ``asymmetric/DER_Serialization/ec_public_key.der``- Contains the public key
   corresponding to ``ec_private_key.pem``, generated using OpenSSL.
+* ``asymmetric/PEM_Serialization/ec_public_key_rsa_delimiter.pem`` - Contains
+  the public key corresponding to ``ec_private_key.pem``, but with the wrong PEM
+  delimiter (``RSA PUBLIC KEY`` when it should be ``PUBLIC KEY``).
 * ``asymmetric/PEM_Serialization/rsa_private_key.pem`` - Contains an RSA 2048
   bit key generated using OpenSSL, protected by the secret "123456" with DES3
   encryption.
 * ``asymmetric/PEM_Serialization/rsa_public_key.pem`` and
   ``asymmetric/DER_Serialization/rsa_public_key.der``- Contains an RSA 2048
   bit public generated using OpenSSL from ``rsa_private_key.pem``.
+* ``asymmetric/PEM_Serialization/rsa_wrong_delimiter_public_key.pem`` - Contains
+  an RSA 2048 bit public key generated from ``rsa_private_key.pem``, but with
+  the wrong PEM delimiter (``RSA PUBLIC KEY`` when it should be ``PUBLIC KEY``).
 * ``asymmetric/PEM_Serialization/dsa_4096.pem`` - Contains a 4096-bit DSA
   private key generated using OpenSSL.
 * ``asymmetric/PEM_Serialization/dsaparam.pem`` - Contains 2048-bit DSA
@@ -99,8 +118,7 @@ Custom asymmetric vectors
 * ``asymmetric/PKCS8/unenc-dsa-pkcs8.pub.pem`` and
   ``asymmetric/DER_Serialization/unenc-dsa-pkcs8.pub.der`` - Contains a DSA
   2048 bit public key generated using OpenSSL from ``unenc-dsa-pkcs8.pem``.
-* DER conversions of the `GnuTLS example keys`_ for DSA as well as the
-  `OpenSSL example key`_ for RSA.
+* DER conversions of the `GnuTLS example keys`_ for DSA.
 * DER conversions of `enc-rsa-pkcs8.pem`_, `enc2-rsa-pkcs8.pem`_, and
   `unenc-rsa-pkcs8.pem`_.
 * ``asymmetric/public/PKCS1/rsa.pub.pem`` and
@@ -115,6 +133,21 @@ Custom asymmetric vectors
   the private key for the certificate ``x509/custom/ca/rsa_ca.pem``.
 * ``asymmetric/EC/compressed_points.txt`` - Contains compressed public points
   generated using OpenSSL.
+* ``asymmetric/EC/explicit_parameters_private_key.pem`` - Contains an EC
+  private key with an curve defined by explicit parameters.
+* ``asymmetric/EC/explicit_parameters_wap_wsg_idm_ecid_wtls11_private_key.pem`` -
+  Contains an EC private key with over the ``wap-wsg-idm-ecid-wtls11`` curve,
+  encoded with explicit parameters.
+* ``asymmetric/EC/secp128r1_private_key.pem`` - Contains an EC private key on
+  the curve ``secp128r1``.
+* ``asymmetric/EC/sect163k1-spki.pem`` - Contains an EC SPKI on the curve
+  ``sect163k1``.
+* ``asymmetric/EC/sect163r2-spki.pem`` - Contains an EC SPKI on the curve
+  ``sect163r2``.
+* ``asymmetric/EC/sect233k1-spki.pem`` - Contains an EC SPKI on the curve
+  ``sect233k1``.
+* ``asymmetric/EC/sect233r1-spki.pem`` - Contains an EC SPKI on the curve
+  ``sect233r1``.
 * ``asymmetric/X448/x448-pkcs8-enc.pem`` and
   ``asymmetric/X448/x448-pkcs8-enc.der`` contain an X448 key encrypted with
   AES 256 CBC with the password ``password``.
@@ -156,7 +189,63 @@ Custom asymmetric vectors
 * ``asymmetric/PKCS8/rsa_pss_2048_hash_mask_salt.pem`` - A 2048-bit RSA PSS key
   with the hash (SHA256), mask algorithm (SHA256), and salt length (32)
   PSS parameters set.
-
+* ``asymmetric/Traditional_OpenSSL_Serialization/testrsa.pem`` - A 2048-bit RSA
+  key, encoded as a "traditional" ``RSA PRIVATE KEY`` PEM block, rather than a
+  ``PRIVATE KEY`` block.
+* ``asymmetric/Traditional_OpenSSL_Serialization/testrsa-encrypted.pem`` - The
+  above, encrypted at the PEM level with AES-128-CBC and password "password".
+* ``asymmetric/Traditional_OpenSSL_Serialization/key1.pem`` - The above,
+  encrypted at the PEM level with DES-EDE3-CBC and password "123456".
+* ``asymmetric/Traditional_OpenSSL_Serialization/key2.pem`` - The above,
+  encrypted at the PEM level with AES-128-CBC and password "a123456".
+* ``asymmetric/DER_Serialization/testrsa.der`` - The above as a DER-encoded
+  RSAPrivateKey structure.
+* ``asymmetric/DSA/custom/nilpotent.pem`` -- A key where the field is actually
+  a ring and the generator of the multiplicative subgroup is actually
+  nilpotent with low degree. Taken from BoringSSL (see
+  ``TEST(DSATest, NilpotentGenerator)``).
+* ``asymmetric/PKCS8/ec-invalid-private-scalar.pem`` - Contains a PKCS8 encoded
+  PEM with a ``secp256r1`` OID and an invalid (very large) private scalar.
+* ``asymmetric/PKCS8/invalid-version.der`` - Contains a PKCS8 encoded DER with
+  an invalid version field.
+* ``asymmetric/PKCS8/unknown-oid.der`` - Contains a PKCS8 encoded DER with an
+  unknown OID.
+* ``asymmetric/Traditional_OpenSSL_Serialization/rsa-wrong-version.pem`` - An
+  RSA key, encoded as a "traditional" ``RSA PRIVATE KEY`` PEM block, with an
+  invalid version number.
+* ``asymmetric/Traditional_OpenSSL_Serialization/dsa-wrong-version.pem`` - A
+  DSA key, encoded as a "traditional" ``DSA PRIVATE KEY`` PEM block, with an
+  invalid version number.
+* ``asymmetric/PKCS8/ec-inconsistent-curve.pem`` - A PKCS8 encoded EC key where
+  the the curve OID in the parameters does not match the curve OID in the key.
+* ``asymmetric/PKCS8/ec-inconsistent-curve2.pem`` - A PKCS8 encoded EC key
+  where the the curve OID in the parameters does not match the curve OID in
+  the key (the OIDs are reversed from ``ec-inconsistent-curve.pem``).
+* ``asymmetric/EC/ec-missing-curve.pem`` - A PKCS#1 encoded EC key where the
+  curve OID is missing.
+* ``asymmetric/PKCS8/ec-consistent-curve.pem`` - A PKCS8 encoded EC key where
+  the the curve OID in the parameters is the same as the curve OID in the key
+  (encoding the curve OID twice is duplicative, as the inner curve is
+  optional).
+* ``asymmetric/PKCS8/ec-invalid-version.pem`` - A PKCS8 encoded EC key with an
+  invalid elliptic curve version field.
+* ``asymmetric/PKCS8/enc-rsa-3des.pem`` - A PKCS8 encoded RSA key encrypted
+  with 3DES, with the password "password".
+* ``asymmetric/PKCS8/enc-unknown-algorithm.pem`` - A PKCS8 encoded key with an
+  unknown encryption algorithm.
+* ``asymmetric/PKCS8/enc-unknown-pbkdf2-prf.pem`` - A PKCS8 encoded key
+  encrypted using PBKDF2 with an unknown PRF.
+* ``asymmetric/PKCS8/enc-unknown-kdf.pem`` - A PKCS8 encoded key encrypted
+  using an unknown KDF.
+* ``asymmetric/Traditional_OpenSSL_Serialization/key1-no-dek-info.pem`` - An
+  RSA key in an encrypted PEM with no ``DEK-Info`` header.
+* ``asymmetric/Traditional_OpenSSL_Serialization/key1-malformed-dek-info.pem``
+  - An RSA key in an encrypted PEM with a malformed ``DEK-Info`` header (no
+  comma).
+* ``asymmetric/Traditional_OpenSSL_Serialization/key1-malformed-iv.pem`` - An
+  RSA key in an encrypted PEM with a malformed IV (not valid hex).
+* ``asymmetric/Traditional_OpenSSL_Serialization/key1-short-iv.pem`` - An
+  RSA key in an encrypted PEM with an IV that's too short (less than 8 bytes).
 
 Key exchange
 ~~~~~~~~~~~~
@@ -204,6 +293,10 @@ Key exchange
 
 * ``vectors/cryptoraphy_vectors/asymmetric/ECDH/brainpool.txt`` contains
   Brainpool vectors from :rfc:`7027`.
+
+* ``vectors/cryptography_vectors/asymmetric/DH/dhpub_cryptography_old.pem``
+  contains a Diffie-Hellman public key generated with a previous version of
+  ``cryptography``.
 
 X.509
 ~~~~~
@@ -477,6 +570,8 @@ Custom X.509 Vectors
   using ``ed448-pkcs8.pem`` as key.
 * ``ca/rsa_ca.pem`` - A self-signed RSA certificate with ``basicConstraints``
   set to true. Its private key is ``ca/rsa_key.pem``.
+* ``ca/rsae_ca.pem`` - A self-signed RSA certificate using a (non-PSS) RSA
+  public key and a RSA PSS signature. Its private key is ``ca/rsa_key.pem``.
 * ``invalid-sct-version.der`` - A certificate with an SCT with an unknown
   version.
 * ``invalid-sct-length.der`` - A certificate with an SCT with an internal
@@ -507,6 +602,22 @@ Custom X.509 Vectors
   algorithm parameters. This encoding is invalid, but was generated by Java 11.
 * ``dsa_null_alg_params.pem`` - A certificate with a DSA signature with ``NULL``
   algorithm parameters. This encoding is invalid, but was generated by Java 20.
+* ``ekucrit-testuser-cert.pem`` - A leaf certificate containing a critical EKU.
+  This is an invalid certificate per CA/B 7.1.2.7.6.
+* ``empty-eku.pem`` - A leaf certificate containing an empty EKU extension.
+  This is an invalid certificate per :rfc:`5280` 4.2.1.12.
+* ``malformed-san.pem`` - A certificate with a malformed SAN.
+* ``malformed-ian.pem`` - A certificate with a malformed IAN.
+* ``admissions_extension_optional_data_not_provided.pem`` -
+  A certificate containing the ``Admissions`` extension with multiple admissions,
+  signed by ``x509/custom/ca/rsa_ca.pem`` CA. The admissions in this certificate
+  are prepared using synthetic data to verify the possible corner cases are handled
+  by the parser correctly (an admission missing naming authority or admission
+  authority, a profession info missing naming authority or profession OIDs
+  or the registration number etc).
+* ``admissions_extension_authority_not_provided.pem`` - A certificate containing
+  the ``Admissions`` extension with no admissions and no admission authority,
+  signed by ``x509/custom/ca/rsa_ca.pem`` CA.
 
 Custom X.509 Request Vectors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -559,6 +670,8 @@ Custom X.509 Request Vectors
   invalid.
 * ``long-form-attribute.pem`` - A certificate signing request containing an
   attribute whose value's tag is encoded in the long form.
+* ``zero-element-attribute.pem`` - A certificate signing request containing an
+  attribute whose value has zero elements.
 
 Custom X.509 Certificate Revocation List Vectors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -759,7 +872,7 @@ Custom PKCS12 Test Vectors
 * ``pkcs12/name-2-3-pwd.p12`` - A PKCS12 file containing a cert
   (``pkcs12/ca/ca.pem``) and key (``pkcs12/ca/ca_key.pem``),
   as well as two additional certificates (``x509/cryptography.io.pem``
-  and ``x509/letsencryptx3.pem``) with friendly names ``name2` and
+  and ``x509/letsencryptx3.pem``) with friendly names ``name2`` and
   ``name3`` respectively, encrypted via AES 256 CBC with the password
   ``cryptography``.
 * ``pkcs12/name-2-pwd.p12`` - A PKCS12 file containing a cert
@@ -821,6 +934,15 @@ Custom PKCS7 Test Vectors
 * ``pkcs7/amazon-roots.der`` - A DER encoded PCKS7 file containing Amazon Root
   CA 2 and 3 generated by OpenSSL.
 * ``pkcs7/enveloped.pem`` - A PEM encoded PKCS7 file with enveloped data.
+* ``pkcs7/enveloped-triple-des.pem`` - A PEM encoded PKCS7 file with
+  enveloped data, with content encrypted using DES EDE3 CBC (also called
+  Triple DES), under the public key of ``x509/custom/ca/rsa_ca.pem``.
+* ``pkcs7/enveloped-rsa-oaep.pem``- A PEM encoded PKCS7 file with
+  enveloped data, with key encrypted using RSA-OAEP, under the public key of
+  ``x509/custom/ca/rsa_ca.pem``.
+* ``pkcs7/enveloped-no-content.der``- A DER encoded PKCS7 file with
+  enveloped data, without encrypted content, with key encrypted under the
+  public key of ``x509/custom/ca/rsa_ca.pem``.
 
 Custom OpenSSH Test Vectors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -926,6 +1048,8 @@ Key derivation functions
 * X9.63 KDF from `NIST CAVP`_.
 * SP 800-108 Counter Mode KDF (HMAC-SHA1, HMAC-SHA224, HMAC-SHA256,
   HMAC-SHA384, HMAC-SHA512) from `NIST CAVP`_.
+* argon2id from :rfc:`9106`, OpenSSL's `evpkdf_argon2.txt`_, and the
+  argon2 command line application.
 
 Key wrapping
 ~~~~~~~~~~~~
@@ -965,10 +1089,13 @@ Symmetric ciphers
 * IDEA (ECB) from the `NESSIE IDEA vectors`_ created by `NESSIE`_.
 * IDEA (CBC, CFB, OFB) generated by this project.
   See: :doc:`/development/custom-vectors/idea`
+* RC2-128-CBC generated by this project. See: :doc:`/development/custom-vectors/rc2`
 * SEED (ECB) from :rfc:`4269`.
 * SEED (CBC) from :rfc:`4196`.
 * SEED (CFB, OFB) generated by this project.
   See: :doc:`/development/custom-vectors/seed`
+* SM4 (CBC, CFB, CTR, ECB, OFB) from `draft-ribose-cfrg-sm4-10`_.
+* SM4 (GCM) from :rfc:`8998`.
 
 Two factor authentication
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1006,6 +1133,7 @@ Created Vectors
     custom-vectors/idea
     custom-vectors/seed
     custom-vectors/hkdf
+    custom-vectors/rc2
 
 
 If official test vectors appear in the future the custom generated vectors
@@ -1023,7 +1151,7 @@ header format (substituting the correct information):
 
 .. _`NIST`: https://www.nist.gov/
 .. _`IETF`: https://www.ietf.org/
-.. _`Project Wycheproof`: https://github.com/google/wycheproof
+.. _`Project Wycheproof`: https://github.com/C2SP/wycheproof
 .. _`NIST CAVP`: https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program
 .. _`Bruce Schneier's vectors`: https://www.schneier.com/wp-content/uploads/2015/12/vectors-2.txt
 .. _`Camellia page`: https://info.isl.ntt.co.jp/crypt/eng/camellia/
@@ -1033,11 +1161,9 @@ header format (substituting the correct information):
 .. _`BoringSSL ChaCha20Poly1305 tests`: https://boringssl.googlesource.com/boringssl/+/2e2a226ac9201ac411a84b5e79ac3a7333d8e1c9/crypto/cipher_extra/test/chacha20_poly1305_tests.txt
 .. _`BoringSSL evp tests`: https://boringssl.googlesource.com/boringssl/+/ce3773f9fe25c3b54390bc51d72572f251c7d7e6/crypto/evp/evp_tests.txt
 .. _`RIPEMD website`: https://homes.esat.kuleuven.be/~bosselae/ripemd160.html
-.. _`draft RFC`: https://tools.ietf.org/html/draft-josefsson-scrypt-kdf-01
+.. _`draft RFC`: https://datatracker.ietf.org/doc/html/draft-josefsson-scrypt-kdf-01
 .. _`Specification repository`: https://github.com/fernet/spec
 .. _`errata`: https://www.rfc-editor.org/errata_search.php?rfc=6238
-.. _`OpenSSL example key`: https://github.com/openssl/openssl/blob/d02b48c63a58ea4367a0e905979f140b7d090f86/test/testrsa.pem
-.. _`GnuTLS key parsing tests`: https://gitlab.com/gnutls/gnutls/-/commit/f16ef39ef0303b02d7fa590a37820440c466ce8d
 .. _`enc-rsa-pkcs8.pem`: https://gitlab.com/gnutls/gnutls/blob/f8d943b38bf74eaaa11d396112daf43cb8aa82ae/tests/pkcs8-decode/encpkcs8.pem
 .. _`enc2-rsa-pkcs8.pem`: https://gitlab.com/gnutls/gnutls/blob/f8d943b38bf74eaaa11d396112daf43cb8aa82ae/tests/pkcs8-decode/enc2pkcs8.pem
 .. _`unenc-rsa-pkcs8.pem`: https://gitlab.com/gnutls/gnutls/blob/f8d943b38bf74eaaa11d396112daf43cb8aa82ae/tests/pkcs8-decode/unencpkcs8.pem
@@ -1046,8 +1172,9 @@ header format (substituting the correct information):
 .. _`GnuTLS example keys`: https://gitlab.com/gnutls/gnutls/-/commit/ad2061deafdd7db78fd405f9d143b0a7c579da7b
 .. _`NESSIE IDEA vectors`: https://www.cosic.esat.kuleuven.be/nessie/testvectors/bc/idea/Idea-128-64.verified.test-vectors
 .. _`NESSIE`: https://en.wikipedia.org/wiki/NESSIE
+.. _`draft-ribose-cfrg-sm4-10`: https://datatracker.ietf.org/doc/html/draft-ribose-cfrg-sm4-10
 .. _`Ed25519 website`: https://ed25519.cr.yp.to/software.html
-.. _`NIST SP-800-38B`: https://csrc.nist.gov/publications/detail/sp/800-38b/archive/2005-05-01
+.. _`NIST SP-800-38B`: https://csrc.nist.gov/pubs/sp/800/38/b/final
 .. _`NIST PKI Testing`: https://csrc.nist.gov/Projects/PKI-Testing
 .. _`testx509.pem`: https://github.com/openssl/openssl/blob/master/test/testx509.pem
 .. _`DigiCert Global Root G3`: http://cacerts.digicert.com/DigiCertGlobalRootG3.crt
@@ -1068,3 +1195,5 @@ header format (substituting the correct information):
 .. _`dkg's additional OCB3 vectors`: https://gitlab.com/dkg/ocb-test-vectors
 .. _`OpenSSL's OCB vectors`: https://github.com/openssl/openssl/commit/2f19ab18a29cf9c82cdd68bc8c7e5be5061b19be
 .. _`badkeys`: https://github.com/vcsjones/badkeys/tree/50f1cc5f8d13bf3a2046d689f6452decb15d9c3c
+.. _`evpkdf_argon2.txt`: https://github.com/openssl/openssl/blob/01f4b44e075a796d62d3b007a80c5c04d0e77bfb/test/recipes/30-test_evp_data/evpkdf_argon2.txt
+.. _`OpenSSL's RFC 6979 test vectors`: https://github.com/openssl/openssl/blob/01690a7ff36c4d18c48b301cdf375c954105a1d9/test/recipes/30-test_evp_data/evppkey_ecdsa_rfc6979.txt

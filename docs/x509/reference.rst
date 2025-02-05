@@ -223,6 +223,9 @@ Loading Certificates
 
     :returns: An instance of :class:`~cryptography.x509.Certificate`.
 
+    :raises ValueError: If a certificate cannot be parsed from the provided
+        data.
+
 Loading Certificate Revocation Lists
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -363,6 +366,21 @@ X.509 Certificate Object
             >>> public_key = cert.public_key()
             >>> isinstance(public_key, rsa.RSAPublicKey)
             True
+
+    .. attribute:: public_key_algorithm_oid
+
+        .. versionadded:: 43.0.0
+
+        :type: :class:`ObjectIdentifier`
+
+        Returns the :class:`ObjectIdentifier` of the public key algorithm found
+        inside the certificate. This will be one of the OIDs from
+        :class:`~cryptography.x509.oid.PublicKeyAlgorithmOID`.
+
+        .. doctest::
+
+            >>> cert.public_key_algorithm_oid
+            <ObjectIdentifier(oid=1.2.840.113549.1.1.1, name=rsaEncryption)>
 
     .. attribute:: not_valid_before
 
@@ -867,6 +885,11 @@ X.509 Certificate Builder
     :canonical: cryptography.x509.base.CertificateBuilder
 
     .. versionadded:: 1.0
+    
+    .. note::
+       All methods, except :meth:`sign`, return a **new** CertificateBuilder
+       instance with the corresponding updated value. They do not modify the
+       existing builder in place.
 
     .. doctest::
 
@@ -913,6 +936,8 @@ X.509 Certificate Builder
 
         :param name: The :class:`~cryptography.x509.Name` that describes the
             issuer (CA).
+        
+        :return: A new :class:`CertificateBuilder` with the updated issuer name.
 
     .. method:: subject_name(name)
 
@@ -920,6 +945,8 @@ X.509 Certificate Builder
 
         :param name: The :class:`~cryptography.x509.Name` that describes the
             subject.
+        
+        :return: A new :class:`CertificateBuilder` with the updated subject name.
 
     .. method:: public_key(public_key)
 
@@ -927,6 +954,8 @@ X.509 Certificate Builder
 
         :param public_key: The subject's public key. This can be one of
             :data:`~cryptography.hazmat.primitives.asymmetric.types.CertificatePublicKeyTypes`.
+        
+        :return: A new :class:`CertificateBuilder` with the updated public key.
 
     .. method:: serial_number(serial_number)
 
@@ -942,6 +971,8 @@ X.509 Certificate Builder
             identify this certificate (most notably during certificate
             revocation checking). Users should consider using
             :func:`~cryptography.x509.random_serial_number` when possible.
+        
+        :return: A new :class:`CertificateBuilder` with the updated serial number.
 
     .. method:: not_valid_before(time)
 
@@ -952,6 +983,8 @@ X.509 Certificate Builder
         :param time: The :class:`datetime.datetime` object (in UTC) that marks the
             activation time for the certificate.  The certificate may not be
             trusted clients if it is used before this time.
+        
+        :return: A new :class:`CertificateBuilder` with the updated activation time.
 
     .. method:: not_valid_after(time)
 
@@ -962,6 +995,8 @@ X.509 Certificate Builder
         :param time: The :class:`datetime.datetime` object (in UTC) that marks the
             expiration time for the certificate.  The certificate may not be
             trusted clients if it is used after this time.
+        
+        :return: A new :class:`CertificateBuilder` with the updated expiration time.
 
     .. method:: add_extension(extval, critical)
 
@@ -972,6 +1007,8 @@ X.509 Certificate Builder
 
         :param critical: Set to ``True`` if the extension must be understood and
              handled by whoever reads the certificate.
+        
+        :return: A new :class:`CertificateBuilder` with the additional extension.
 
     .. method:: sign(private_key, algorithm, *, rsa_padding=None)
 
@@ -1032,6 +1069,21 @@ X.509 CSR (Certificate Signing Request) Object
             >>> public_key = csr.public_key()
             >>> isinstance(public_key, rsa.RSAPublicKey)
             True
+
+    .. attribute:: public_key_algorithm_oid
+
+        .. versionadded:: 43.0.0
+
+        :type: :class:`ObjectIdentifier`
+
+        Returns the :class:`ObjectIdentifier` of the public key algorithm found
+        inside the certificate. This will be one of the OIDs from
+        :class:`~cryptography.x509.oid.PublicKeyAlgorithmOID`.
+
+        .. doctest::
+
+            >>> csr.public_key_algorithm_oid
+            <ObjectIdentifier(oid=1.2.840.113549.1.1.1, name=rsaEncryption)>
 
     .. attribute:: subject
 
@@ -2198,7 +2250,7 @@ X.509 Extensions
     public key corresponding to the private key used to sign a certificate.
     This extension is typically used to assist in determining the appropriate
     certificate chain. For more information about generation and use of this
-    extension see `RFC 5280 section 4.2.1.1`_.
+    extension see :rfc:`5280#section-4.2.1.1`.
 
     .. attribute:: oid
 
@@ -2375,6 +2427,7 @@ X.509 Extensions
 
             >>> from cryptography import x509
             >>> from cryptography.hazmat.primitives import hashes
+            >>> from cryptography.x509.oid import ExtensionOID
             >>> cert = x509.load_pem_x509_certificate(cryptography_cert_pem)
             >>> # Get the subjectAltName extension from the certificate
             >>> ext = cert.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
@@ -2964,6 +3017,28 @@ X.509 Extensions
         Returns
         :attr:`~cryptography.x509.oid.ExtensionOID.CERTIFICATE_POLICIES`.
 
+.. class:: Admissions(authority, admissions)
+    :canonical: cryptography.x509.extensions.Admissions
+
+    .. versionadded:: 44.0.0
+
+    The admissions extension contains information on registration and professional admission,
+    as specified by `Common PKI v2`_.
+    It is an iterable, containing one or more :class:`~cryptography.x509.Admission` instances.
+
+    .. attribute:: oid
+
+        :type: :class:`ObjectIdentifier`
+
+        Returns :attr:`~cryptography.x509.oid.ExtensionOID.ADMISSIONS`.
+
+    .. attribute:: authority
+
+        :type: :class:`GeneralName` or None
+
+        An optional identifier of the institution who granted the admissions. This serves as the default value
+        for the admission authority in a single :class:`~cryptography.x509.Admission` if it is not specified there.
+
 Certificate Policies Classes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -3033,6 +3108,98 @@ These classes may be present within a :class:`CertificatePolicies` instance.
         :type: list
 
         A list of integers.
+
+Admissions Classes
+~~~~~~~~~~~~~~~~~~
+
+These classes may be present within an :class:`Admissions` instance.
+
+.. class:: Admission(admission_authority, naming_authority, profession_infos)
+    :canonical: cryptography.x509.extensions.Admission
+
+    .. versionadded:: 44.0.0
+
+    Contains professional information and optionally the authorization information.
+
+    .. attribute:: admission_authority
+
+        :type: :class:`GeneralName` or None
+
+        An optional identifier of the institution who granted the admission.
+
+    .. attribute:: naming_authority
+
+        :type: :class:`NamingAuthority` or None
+
+        An optional identifier of the institution who is administering the information of the professions in this admission.
+        This serves as the default value for the naming authority in a single :class:`~cryptography.x509.ProfessionInfo`
+        if it is not specified there.
+
+    .. attribute:: profession_infos
+
+        :type: list
+
+        An information on the professions that are part of this admission. This is a list of :class:`ProfessionInfo` objects.
+
+.. class:: ProfessionInfo(naming_authority, profession_items, profession_oids, registration_number, add_profession_info)
+    :canonical: cryptography.x509.extensions.ProfessionInfo
+
+    .. versionadded:: 44.0.0
+
+    Contains the information for a single profession in the admission.
+
+    .. attribute:: naming_authority
+
+        :type: :class:`NamingAuthority` or None
+
+        An optional identifier of the institution who is administering the information of this profession.
+
+    .. attribute:: profession_items
+
+        :type: list
+
+        One or more text strings identifying the profession.
+
+    .. attribute:: profession_oids
+
+        :type: list or None
+
+        An optional list of :class:`ObjectIdentifier` elements. Each element in the list corresponds to the resp.
+        text string in the :attr:`profession_items` list.
+
+    .. attribute:: registration_number
+
+        :type: str or None
+
+        An optional registration number for the profession.
+
+    .. attribute:: add_profession_info
+
+        :type: bytes or None
+
+        Optional additional application-specific information in DER-encoded form.
+
+.. class:: NamingAuthority(id, url, text)
+    :canonical: cryptography.x509.extensions.NamingAuthority
+
+    .. versionadded:: 44.0.0
+
+    Identifies an institution who is responsible for the administration of title registers in an admission. The naming
+    authority can be identified by an object identifier in the field :attr:`id`, by the text in the field :attr:`text`,
+    by a URL address in the field :attr:`url`, or by a combination of them.
+
+    .. attribute:: id
+
+        :type: :class:`ObjectIdentifier` or None
+
+    .. attribute:: url
+
+        :type: str or None
+
+    .. attribute:: text
+
+        :type: str or None
+
 
 .. _crl_entry_extensions:
 
@@ -3117,6 +3284,14 @@ These extensions are only valid within a :class:`RevokedCertificate` object.
     .. attribute:: invalidity_date
 
         :type: :class:`datetime.datetime`
+
+    .. attribute:: invalidity_date_utc
+
+        .. versionadded:: 43.0.0
+
+        :type: :class:`datetime.datetime`
+
+        The invalidity date in UTC as a timezone-aware datetime object.
 
 OCSP Extensions
 ~~~~~~~~~~~~~~~
@@ -3584,7 +3759,17 @@ instances. The following common OIDs are available as constants.
         Corresponds to the dotted string ``"1.3.6.1.5.5.7.3.17"``. This
         is used to denote that a certificate may be assigned to an IPSEC SA,
         and can be used by the assignee to initiate an IPSec Internet Key
-        Exchange. For more information see :rfc:`4945`.
+        Exchange (IKE). For more information see :rfc:`4945`.
+
+    .. attribute:: BUNDLE_SECURITY
+
+        .. versionadded:: 45.0.0
+
+        Corresponds to the dotted string ``"1.3.6.1.5.5.7.3.35"``. This
+        is used to denote that a certificate is used by a Bundle Protocol
+        Node to secure data either in transit (e.g. via TLS/TCPCL) or at
+        rest (e.g. via BPSec).
+        For more information see :rfc:`9172` and :rfc:`9174`.
 
     .. attribute:: CERTIFICATE_TRANSPARENCY
 
@@ -3594,6 +3779,70 @@ instances. The following common OIDs are available as constants.
         is used to denote that a certificate may be used as a pre-certificate
         signing certificate for Certificate Transparency log operation
         purposes. For more information see :rfc:`6962`.
+
+
+.. class:: OtherNameFormOID
+    :canonical: cryptography.hazmat._oid.OtherNameFormOID
+
+    .. versionadded:: 45.0.0
+
+    .. attribute:: PERMANENT_IDENTIFIER
+
+        Corresponds to the dotted string ``"1.3.6.1.5.5.7.8.3"``.
+        This is used to correlate multiple certificates which relate to
+        the same entity, as identified by this Other Name value.
+        The Other Name value is encoded as sequence of optional
+        UTF-8 value and optional OID assigner.
+        For more information see :rfc:`4043`.
+
+    .. attribute:: HW_MODULE_NAME
+
+        Corresponds to the dotted string ``"1.3.6.1.5.5.7.8.4"``.
+        This is used to identify hardware module components when
+        protecting firmware packages.
+        The Other Name value is encoded as sequence of OID hardware-type
+        and octet-string serial number.
+        For more information see :rfc:`4108`.
+
+    .. attribute:: DNS_SRV
+
+        Corresponds to the dotted string ``"1.3.6.1.5.5.7.8.7"``.
+        This is used to identify service names using qualified DNS name
+        of the form ``_Service.Name``.
+        The Other Name value is encoded as IA5 text.
+        For more information see :rfc:`4985`.
+
+    .. attribute:: NAI_REALM
+
+        Corresponds to the dotted string ``"1.3.6.1.5.5.7.8.8"``.
+        This is used to identify realms for RADIUS dynamic peer discovery
+        using Network Access Identifier (NAI) values.
+        The Other Name value is encoded as UTF-8 text.
+        For more information see :rfc:`7585`.
+
+    .. attribute:: SMTP_UTF8_MAILBOX
+
+        Corresponds to the dotted string ``"1.3.6.1.5.5.7.8.9"``.
+        This is used to identify an internationalized email address associated
+        with an entity.
+        The Other Name value is encoded as UTF-8 text.
+        For more information see :rfc:`9598`.
+
+    .. attribute:: ACP_NODE_NAME
+
+        Corresponds to the dotted string ``"1.3.6.1.5.5.7.8.10"``.
+        This is used to identify a single node within an
+        Autonomic Control Plane (ACP).
+        The Other Name value is encoded as IA5 text.
+        For more information see :rfc:`8994`.
+
+    .. attribute:: BUNDLE_EID
+
+        Corresponds to the dotted string ``"1.3.6.1.5.5.7.8.11"``.
+        This is used to contain the text form of an endpoint identifier (EID)
+        for the Bundle Protocol Version 7.
+        The Other Name value is encoded as IA5 text.
+        For more information see :rfc:`9171` and :rfc:`9174`.
 
 
 .. class:: AuthorityInformationAccessOID
@@ -3792,6 +4041,12 @@ instances. The following common OIDs are available as constants.
 
         Corresponds to the dotted string ``"1.3.6.1.4.1.311.21.7"``.
 
+    .. attribute:: ADMISSIONS
+
+        .. versionadded:: 44.0.0
+
+        Corresponds to the dotted string ``"1.3.36.8.3.3"``.
+
 
 .. class:: CRLEntryExtensionOID
     :canonical: cryptography.hazmat._oid.CRLEntryExtensionOID
@@ -3839,6 +4094,65 @@ instances. The following common OIDs are available as constants.
     .. attribute:: UNSTRUCTURED_NAME
 
         Corresponds to the dotted string ``"1.2.840.113549.1.9.2"``.
+
+
+.. class:: PublicKeyAlgorithmOID
+    :canonical: cryptography.hazmat._oid.PublicKeyAlgorithmOID
+
+    .. versionadded:: 43.0.0
+
+    .. attribute:: DSA
+
+        Corresponds to the dotted string ``"1.2.840.10040.4.1"``. This is a
+        :class:`~cryptography.hazmat.primitives.asymmetric.dsa.DSAPublicKey`
+        public key.
+
+    .. attribute:: EC_PUBLIC_KEY
+
+        Corresponds to the dotted string ``"1.2.840.10045.2.1"``. This is a
+        :class:`~cryptography.hazmat.primitives.asymmetric.ec.EllipticCurvePublicKey`
+        public key.
+
+    .. attribute:: RSAES_PKCS1_v1_5
+
+        Corresponds to the dotted string ``"1.2.840.113549.1.1.1"``. This is a
+        :class:`~cryptography.hazmat.primitives.asymmetric.rsa.RSAPublicKey`
+        public key with
+        :class:`~cryptography.hazmat.primitives.asymmetric.padding.PKCS1v15`
+        padding.
+
+    .. attribute:: RSASSA_PSS
+
+        Corresponds to the dotted string ``"1.2.840.113549.1.1.10"``. This is a
+        :class:`~cryptography.hazmat.primitives.asymmetric.rsa.RSAPublicKey`
+        public key with
+        :class:`~cryptography.hazmat.primitives.asymmetric.padding.PSS`
+        padding.
+
+    .. attribute:: X25519
+
+        Corresponds to the dotted string ``"1.3.101.110"``. This is a
+        :class:`~cryptography.hazmat.primitives.asymmetric.x25519.X25519PublicKey`
+        public key.
+
+    .. attribute:: X448
+
+        Corresponds to the dotted string ``"1.3.101.111"``. This is a
+        :class:`~cryptography.hazmat.primitives.asymmetric.x448.X448PublicKey`
+        public key.
+
+    .. attribute:: ED25519
+
+        Corresponds to the dotted string ``"1.3.101.112"``. This is a
+        :class:`~cryptography.hazmat.primitives.asymmetric.ed25519.Ed25519PublicKey`
+        public key.
+
+    .. attribute:: ED448
+
+        Corresponds to the dotted string ``"1.3.101.113"``. This is a
+        :class:`~cryptography.hazmat.primitives.asymmetric.ed448.Ed448PublicKey`
+        public key.
+
 
 Helper Functions
 ~~~~~~~~~~~~~~~~
@@ -3915,9 +4229,8 @@ Exceptions
         :type: int
 
         The integer value of the unsupported type. The complete list of
-        types can be found in `RFC 5280 section 4.2.1.6`_.
+        types can be found in :rfc:`5280#section-4.2.1.6`.
 
 
-.. _`RFC 5280 section 4.2.1.1`: https://tools.ietf.org/html/rfc5280#section-4.2.1.1
-.. _`RFC 5280 section 4.2.1.6`: https://tools.ietf.org/html/rfc5280#section-4.2.1.6
 .. _`CABForum Guidelines`: https://cabforum.org/baseline-requirements-documents/
+.. _`Common PKI v2`: https://www.elektronische-vertrauensdienste.de/EVD/SharedDocuments/Downloads/QES/Common_PKI_v2.0_02.pdf

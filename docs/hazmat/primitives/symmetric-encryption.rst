@@ -174,6 +174,7 @@ Algorithms
 
         >>> import struct, os
         >>> from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        >>> key = os.urandom(32)
         >>> nonce = os.urandom(8)
         >>> counter = 0
         >>> full_nonce = struct.pack("<Q", counter) + nonce
@@ -186,6 +187,12 @@ Algorithms
         b'a secret message'
 
 .. class:: TripleDES(key)
+
+    .. warning::
+
+        This algorithm has been deprecated and moved to the :doc:`/hazmat/decrepit/index`
+        module. If you need to continue using it then update your code to
+        use the new module path. It will be removed from this namespace in 48.0.0.
 
     Triple DES (Data Encryption Standard), sometimes referred to as 3DES, is a
     block cipher standardized by NIST. Triple DES has known crypto-analytic
@@ -205,6 +212,12 @@ Algorithms
 
     .. versionadded:: 0.2
 
+    .. warning::
+
+        This algorithm has been deprecated and moved to the :doc:`/hazmat/decrepit/index`
+        module. If you need to continue using it then update your code to
+        use the new module path. It will be removed from this namespace in 45.0.0.
+
     CAST5 (also known as CAST-128) is a block cipher approved for use in the
     Canadian government by the `Communications Security Establishment`_. It is
     a variable key length cipher and supports keys from 40-128 :term:`bits` in
@@ -217,6 +230,12 @@ Algorithms
 .. class:: SEED(key)
 
     .. versionadded:: 0.4
+
+    .. warning::
+
+        This algorithm has been deprecated and moved to the :doc:`/hazmat/decrepit/index`
+        module. If you need to continue using it then update your code to
+        use the new module path. It will be removed from this namespace in 45.0.0.
 
     SEED is a block cipher developed by the Korea Information Security Agency
     (KISA). It is defined in :rfc:`4269` and is used broadly throughout South
@@ -252,6 +271,12 @@ Weak ciphers
 
 .. class:: Blowfish(key)
 
+    .. warning::
+
+        This algorithm has been deprecated and moved to the :doc:`/hazmat/decrepit/index`
+        module. If you need to continue using it then update your code to
+        use the new module path. It will be removed from this namespace in 45.0.0.
+
     Blowfish is a block cipher developed by Bruce Schneier. It is known to be
     susceptible to attacks when using weak keys. The author has recommended
     that users of Blowfish move to newer algorithms such as :class:`AES`.
@@ -261,6 +286,12 @@ Weak ciphers
     :type key: :term:`bytes-like`
 
 .. class:: ARC4(key)
+
+    .. warning::
+
+        This algorithm has been deprecated and moved to the :doc:`/hazmat/decrepit/index`
+        module. If you need to continue using it then update your code to
+        use the new module path. It will be removed from this namespace in 48.0.0.
 
     ARC4 (Alleged RC4) is a stream cipher with serious weaknesses in its
     initial stream output. Its use is strongly discouraged. ARC4 does not use
@@ -283,6 +314,12 @@ Weak ciphers
         b'a secret message'
 
 .. class:: IDEA(key)
+
+    .. warning::
+
+        This algorithm has been deprecated and moved to the :doc:`/hazmat/decrepit/index`
+        module. If you need to continue using it then update your code to
+        use the new module path. It will be removed from this namespace in 45.0.0.
 
     IDEA (`International Data Encryption Algorithm`_) is a block cipher created
     in 1991. It is an optional component of the `OpenPGP`_ standard. This cipher
@@ -657,6 +694,27 @@ Interfaces
         :meth:`update` and :meth:`finalize` will raise an
         :class:`~cryptography.exceptions.AlreadyFinalized` exception.
 
+    .. method:: reset_nonce(nonce)
+
+        .. versionadded:: 43.0.0
+
+        This method allows changing the nonce for an already existing context.
+        Normally the nonce is set when the context is created and internally
+        incremented as data as passed. However, in some scenarios the same key
+        is used repeatedly but the nonce changes non-sequentially (e.g. ``QUIC``),
+        which requires updating the context with the new nonce.
+
+        This method only works for contexts using
+        :class:`~cryptography.hazmat.primitives.ciphers.algorithms.ChaCha20` or
+        :class:`~cryptography.hazmat.primitives.ciphers.modes.CTR` mode.
+
+        :param nonce: The nonce to update the context with.
+        :type data: :term:`bytes-like`
+        :raises cryptography.exceptions.UnsupportedAlgorithm: If the
+            algorithm does not support updating the nonce.
+        :raises ValueError: If the nonce is not the correct length for the
+            algorithm.
+
 .. class:: AEADCipherContext
 
     When calling ``encryptor`` or ``decryptor`` on a ``Cipher`` object
@@ -846,14 +904,14 @@ Exceptions
 
 
 .. _`described by Colin Percival`: https://www.daemonology.net/blog/2009-06-11-cryptographic-right-answers.html
-.. _`recommends a 96-bit IV length`: https://csrc.nist.gov/publications/detail/sp/800-38d/final
+.. _`recommends a 96-bit IV length`: https://csrc.nist.gov/pubs/sp/800/38/d/final
 .. _`NIST SP-800-38D`: https://csrc.nist.gov/publications/detail/sp/800-38d/final
 .. _`Communications Security Establishment`: https://www.cse-cst.gc.ca
 .. _`encrypt`: https://ssd.eff.org/en/module/what-should-i-know-about-encryption
-.. _`CRYPTREC`: https://www.cryptrec.go.jp/english/
+.. _`CRYPTREC`: https://www.cryptrec.go.jp/en/
 .. _`original version`: https://en.wikipedia.org/wiki/Salsa20#ChaCha_variant
 .. _`significant patterns in the output`: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Electronic_codebook_(ECB)
 .. _`International Data Encryption Algorithm`: https://en.wikipedia.org/wiki/International_Data_Encryption_Algorithm
 .. _`OpenPGP`: https://www.openpgp.org/
 .. _`disk encryption`: https://en.wikipedia.org/wiki/Disk_encryption_theory#XTS
-.. _`draft-ribose-cfrg-sm4-10`: https://tools.ietf.org/html/draft-ribose-cfrg-sm4-10
+.. _`draft-ribose-cfrg-sm4-10`: https://datatracker.ietf.org/doc/html/draft-ribose-cfrg-sm4-10

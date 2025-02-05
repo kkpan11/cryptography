@@ -20,11 +20,17 @@ except ImportError:
     import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 nox.options.reuse_existing_virtualenvs = True
+nox.options.default_venv_backend = "uv|virtualenv"
 
 
-def install(session: nox.Session, *args: str) -> None:
+def install(
+    session: nox.Session,
+    *args: str,
+    verbose: bool = True,
+) -> None:
+    if verbose:
+        args += ("-v",)
     session.install(
-        "-v",
         "-c",
         "ci-constraints-requirements.txt",
         *args,
@@ -41,6 +47,7 @@ def load_pyproject_toml() -> dict:
 @nox.session(name="tests-ssh")
 @nox.session(name="tests-randomorder")
 @nox.session(name="tests-nocoverage")
+@nox.session(name="tests-rust-debug")
 def tests(session: nox.Session) -> None:
     extras = "test"
     if session.name == "tests-ssh":
@@ -60,10 +67,20 @@ def tests(session: nox.Session) -> None:
             }
         )
 
-    install(session, f".[{extras}]")
     install(session, "-e", "./vectors")
+    if session.name == "tests-rust-debug":
+        install(
+            session,
+            "--config-settings=build-args=--profile=dev",
+            f".[{extras}]",
+        )
+    else:
+        install(session, f".[{extras}]")
 
-    session.run("pip", "list")
+    if session.venv_backend == "uv":
+        session.run("uv", "pip", "list")
+    else:
+        session.run("pip", "list")
 
     if session.name != "tests-nocoverage":
         cov_args = [
@@ -90,7 +107,7 @@ def tests(session: nox.Session) -> None:
 
     if session.name != "tests-nocoverage":
         [rust_so] = glob.glob(
-            f"{session.virtualenv.location}/**/cryptography/hazmat/bindings/_rust.*",
+            f"{session.virtualenv.location}/lib/**/cryptography/hazmat/bindings/_rust.*",
             recursive=True,
         )
         process_rust_coverage(session, [rust_so], prof_location)
@@ -148,6 +165,14 @@ def docs(session: nox.Session) -> None:
     session.run(
         "python3", "-m", "readme_renderer", "README.rst", "-o", "/dev/null"
     )
+    session.run(
+        "python3",
+        "-m",
+        "readme_renderer",
+        "vectors/README.rst",
+        "-o",
+        "/dev/null",
+    )
 
 
 @nox.session(name="docs-linkcheck")
@@ -164,6 +189,7 @@ def flake(session: nox.Session) -> None:
     # TODO: Ideally there'd be a pip flag to install just our dependencies,
     # but not install us.
     pyproject_data = load_pyproject_toml()
+    install(session, "-e", "vectors/")
     install(
         session,
         *pyproject_data["build-system"]["requires"],
@@ -172,11 +198,9 @@ def flake(session: nox.Session) -> None:
         *pyproject_data["project"]["optional-dependencies"]["ssh"],
         *pyproject_data["project"]["optional-dependencies"]["nox"],
     )
-    install(session, "-e", "vectors/")
 
-    session.run("ruff", ".")
+    session.run("ruff", "check", ".")
     session.run("ruff", "format", "--check", ".")
-    session.run("check-sdist", "--no-isolation")
     session.run(
         "mypy",
         "src/cryptography/",
@@ -185,6 +209,7 @@ def flake(session: nox.Session) -> None:
         "release.py",
         "noxfile.py",
     )
+    session.run("check-sdist", "--no-isolation")
 
 
 @nox.session
@@ -206,33 +231,32 @@ def rust(session: nox.Session) -> None:
     pyproject_data = load_pyproject_toml()
     install(session, *pyproject_data["build-system"]["requires"])
 
-    with session.chdir("src/rust/"):
-        session.run("cargo", "fmt", "--all", "--", "--check", external=True)
-        if session.name != "rust-noclippy":
-            session.run(
-                "cargo",
-                "clippy",
-                "--all",
-                "--",
-                "-D",
-                "warnings",
-                external=True,
-            )
-
-        build_output = session.run(
-            "cargo",
-            "test",
-            "--no-default-features",
-            "--all",
-            "--no-run",
-            "-q",
-            "--message-format=json",
-            external=True,
-            silent=True,
-        )
+    session.run("cargo", "fmt", "--all", "--", "--check", external=True)
+    if session.name != "rust-noclippy":
         session.run(
-            "cargo", "test", "--no-default-features", "--all", external=True
+            "cargo",
+            "clippy",
+            "--all",
+            "--",
+            "-D",
+            "warnings",
+            external=True,
         )
+
+    build_output = session.run(
+        "cargo",
+        "test",
+        "--no-default-features",
+        "--all",
+        "--no-run",
+        "-q",
+        "--message-format=json",
+        external=True,
+        silent=True,
+    )
+    session.run(
+        "cargo", "test", "--no-default-features", "--all", external=True
+    )
 
     # It's None on install-only invocations
     if build_output is not None:
@@ -244,6 +268,70 @@ def rust(session: nox.Session) -> None:
                 rust_tests.extend(data["filenames"])
 
         process_rust_coverage(session, rust_tests, prof_location)
+
+
+@nox.session
+def local(session):
+    pyproject_data = load_pyproject_toml()
+    install(session, "-e", "./vectors", verbose=False)
+    install(
+        session,
+        *pyproject_data["build-system"]["requires"],
+        *pyproject_data["project"]["optional-dependencies"]["pep8test"],
+        *pyproject_data["project"]["optional-dependencies"]["test"],
+        *pyproject_data["project"]["optional-dependencies"]["ssh"],
+        *pyproject_data["project"]["optional-dependencies"]["nox"],
+        verbose=False,
+    )
+
+    session.run("ruff", "format", ".")
+    session.run("ruff", "check", ".")
+
+    session.run("cargo", "fmt", "--all", external=True)
+    session.run("cargo", "check", "--all", "--tests", external=True)
+    session.run(
+        "cargo",
+        "clippy",
+        "--all",
+        "--",
+        "-D",
+        "warnings",
+        external=True,
+    )
+
+    session.run(
+        "mypy",
+        "src/cryptography/",
+        "vectors/cryptography_vectors/",
+        "tests/",
+        "release.py",
+        "noxfile.py",
+    )
+
+    session.run(
+        "maturin",
+        "develop",
+        "--release",
+        *(["--uv"] if session.venv_backend == "uv" else []),
+    )
+
+    if session.posargs:
+        tests = session.posargs
+    else:
+        tests = ["tests/"]
+
+    session.run(
+        "pytest",
+        "-n",
+        "auto",
+        "--dist=worksteal",
+        "--durations=10",
+        *tests,
+    )
+
+    session.run(
+        "cargo", "test", "--no-default-features", "--all", external=True
+    )
 
 
 LCOV_SOURCEFILE_RE = re.compile(

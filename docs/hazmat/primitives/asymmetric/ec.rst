@@ -47,6 +47,19 @@ Elliptic Curve Signature Algorithms
     :param algorithm: An instance of
         :class:`~cryptography.hazmat.primitives.hashes.HashAlgorithm`.
 
+    :param bool deterministic_signing: A boolean flag defaulting to ``False``
+        that specifies whether the signing procedure should be deterministic
+        or not, as defined in :rfc:`6979`. This only impacts the signing
+        process, verification is not affected (the verification process
+        is the same for both deterministic and non-deterministic signed
+        messages).
+
+        .. versionadded:: 43.0.0
+
+    :raises cryptography.exceptions.UnsupportedAlgorithm: If
+        ``deterministic_signing`` is set to ``True`` and the version of
+        OpenSSL does not support ECDSA with deterministic signing.
+
     .. doctest::
 
         >>> from cryptography.hazmat.primitives import hashes
@@ -187,31 +200,6 @@ Elliptic Curve Signature Algorithms
         :raises ValueError: Raised if the point is invalid for the curve.
         :returns: A new instance of :class:`EllipticCurvePublicKey`.
 
-    .. classmethod:: from_encoded_point(curve, data)
-
-        .. versionadded:: 1.1
-
-        .. note::
-
-            This has been deprecated in favor of
-            :meth:`~cryptography.hazmat.primitives.asymmetric.ec.EllipticCurvePublicKey.from_encoded_point`
-
-        Decodes a byte string as described in `SEC 1 v2.0`_ section 2.3.3 and
-        returns an :class:`EllipticCurvePublicNumbers`. This method only
-        supports uncompressed points.
-
-        :param curve: An
-            :class:`~cryptography.hazmat.primitives.asymmetric.ec.EllipticCurve`
-            instance.
-
-        :param bytes data: The serialized point byte string.
-
-        :returns: An :class:`EllipticCurvePublicNumbers` instance.
-
-        :raises ValueError: Raised on invalid point type or data length.
-
-        :raises TypeError: Raised when curve is not an
-            :class:`~cryptography.hazmat.primitives.asymmetric.ec.EllipticCurve`.
 
 Elliptic Curve Key Exchange algorithm
 -------------------------------------
@@ -512,6 +500,14 @@ Key Interfaces
         Size (in :term:`bits`) of a secret scalar for the curve (as generated
         by :func:`generate_private_key`).
 
+    .. attribute:: group_order
+
+        .. versionadded:: 45
+
+        :type: int
+
+        The order of the curve's group.
+
 
 .. class:: EllipticCurveSignatureAlgorithm
 
@@ -569,7 +565,8 @@ Key Interfaces
         Sign one block of data which can be verified later by others using the
         public key.
 
-        :param bytes data: The message string to sign.
+        :param data: The message string to sign.
+        :type data: :term:`bytes-like`
 
         :param signature_algorithm: An instance of
             :class:`EllipticCurveSignatureAlgorithm`, such as :class:`ECDSA`.
@@ -678,12 +675,14 @@ Key Interfaces
         Verify one block of data was signed by the private key associated
         with this public key.
 
-        :param bytes signature: The DER-encoded signature to verify.
+        :param signature: The DER-encoded signature to verify.
             A raw signature may be DER-encoded by splitting it into the ``r``
             and ``s`` components and passing them into
             :func:`~cryptography.hazmat.primitives.asymmetric.utils.encode_dss_signature`.
+        :type signature: :term:`bytes-like`
 
-        :param bytes data: The message string that was signed.
+        :param data: The message string that was signed.
+        :type data: :term:`bytes-like`
 
         :param signature_algorithm: An instance of
             :class:`EllipticCurveSignatureAlgorithm`.
@@ -909,8 +908,8 @@ Elliptic Curve Object Identifiers
     :raises LookupError: Raised if no elliptic curve is found that matches
         the provided object identifier.
 
-.. _`FIPS 186-3`: https://csrc.nist.gov/csrc/media/publications/fips/186/3/archive/2009-06-25/documents/fips_186-3.pdf
-.. _`FIPS 186-4`: https://csrc.nist.gov/publications/detail/fips/186/4/final
+.. _`FIPS 186-3`: https://csrc.nist.gov/files/pubs/fips/186-3/final/docs/fips_186-3.pdf
+.. _`FIPS 186-4`: https://csrc.nist.gov/pubs/fips/186-4/final
 .. _`800-56A`: https://csrc.nist.gov/pubs/sp/800/56/a/r3/final
 .. _`some concern`: https://crypto.stackexchange.com/questions/10263/should-we-trust-the-nist-recommended-ecc-parameters
 .. _`less than 224 bits`: https://www.cosic.esat.kuleuven.be/ecrypt/ecrypt2/documents/D.SPA.20.pdf

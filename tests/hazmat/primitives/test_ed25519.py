@@ -117,6 +117,12 @@ class TestEd25519Signing:
         with pytest.raises(InvalidSignature):
             key.public_key().verify(b"0" * 64, b"test data")
 
+    def test_sign_verify_buffer(self, backend):
+        key = Ed25519PrivateKey.generate()
+        data = bytearray(b"test data")
+        signature = key.sign(data)
+        key.public_key().verify(bytearray(signature), data)
+
     def test_generate(self, backend):
         key = Ed25519PrivateKey.generate()
         assert key
@@ -308,6 +314,22 @@ def test_public_key_copy(backend):
         mode="rb",
     )
     key1 = serialization.load_der_private_key(key_bytes, None).public_key()
+    key2 = copy.copy(key1)
+
+    assert key1 == key2
+
+
+@pytest.mark.supported(
+    only_if=lambda backend: backend.ed25519_supported(),
+    skip_message="Requires OpenSSL with Ed25519 support",
+)
+def test_private_key_copy(backend):
+    key_bytes = load_vectors_from_file(
+        os.path.join("asymmetric", "Ed25519", "ed25519-pkcs8.der"),
+        lambda derfile: derfile.read(),
+        mode="rb",
+    )
+    key1 = serialization.load_der_private_key(key_bytes, None)
     key2 = copy.copy(key1)
 
     assert key1 == key2

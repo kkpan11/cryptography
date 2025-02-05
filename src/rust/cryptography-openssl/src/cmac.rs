@@ -2,10 +2,13 @@
 // 2.0, and the BSD License. See the LICENSE file in the root of this repository
 // for complete details.
 
+use std::ptr;
+
+use foreign_types_shared::{ForeignType, ForeignTypeRef};
+use openssl_sys as ffi;
+
 use crate::hmac::DigestBytes;
 use crate::{cvt, cvt_p, OpenSSLResult};
-use foreign_types_shared::{ForeignType, ForeignTypeRef};
-use std::ptr;
 
 foreign_types::foreign_type! {
     type CType = ffi::CMAC_CTX;
@@ -21,7 +24,7 @@ unsafe impl Sync for Cmac {}
 unsafe impl Send for Cmac {}
 
 impl Cmac {
-    pub fn new(key: &[u8], cipher: &openssl::symm::Cipher) -> OpenSSLResult<Cmac> {
+    pub fn new(key: &[u8], cipher: &openssl::cipher::CipherRef) -> OpenSSLResult<Cmac> {
         // SAFETY: All FFI conditions are handled.
         unsafe {
             let ctx = Cmac::from_ptr(cvt_p(ffi::CMAC_CTX_new())?);

@@ -11,11 +11,9 @@ import pytest
 from cryptography.exceptions import InternalError, _Reasons
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.backends.openssl.backend import backend
+from cryptography.hazmat.bindings._rust import openssl as rust_openssl
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.ciphers import Cipher
-from cryptography.hazmat.primitives.ciphers.algorithms import AES
-from cryptography.hazmat.primitives.ciphers.modes import CBC
 
 from ...doubles import (
     DummyAsymmetricPadding,
@@ -32,20 +30,6 @@ from ...utils import (
 # Make ruff happy since we're importing fixtures that pytest patches in as
 # func args
 __all__ = ["rsa_key_2048"]
-
-
-def skip_if_libre_ssl(openssl_version):
-    if "LibreSSL" in openssl_version:
-        pytest.skip("LibreSSL hard-codes RAND_bytes to use arc4random.")
-
-
-class TestLibreSkip:
-    def test_skip_no(self):
-        assert skip_if_libre_ssl("OpenSSL 1.0.2h  3 May 2016") is None
-
-    def test_skip_yes(self):
-        with pytest.raises(pytest.skip.Exception):
-            skip_if_libre_ssl("LibreSSL 2.1.6")
 
 
 class DummyMGF(padding.MGF):
@@ -75,13 +59,13 @@ class TestOpenSSL:
         # Verify the correspondence between these two. And do it in a way that
         # ensures coverage.
         if version.startswith("LibreSSL"):
-            assert backend._lib.CRYPTOGRAPHY_IS_LIBRESSL
-        if backend._lib.CRYPTOGRAPHY_IS_LIBRESSL:
+            assert rust_openssl.CRYPTOGRAPHY_IS_LIBRESSL
+        if rust_openssl.CRYPTOGRAPHY_IS_LIBRESSL:
             assert version.startswith("LibreSSL")
 
         if version.startswith("BoringSSL"):
-            assert backend._lib.CRYPTOGRAPHY_IS_BORINGSSL
-        if backend._lib.CRYPTOGRAPHY_IS_BORINGSSL:
+            assert rust_openssl.CRYPTOGRAPHY_IS_BORINGSSL
+        if rust_openssl.CRYPTOGRAPHY_IS_BORINGSSL:
             assert version.startswith("BoringSSL")
 
     def test_openssl_version_number(self):
@@ -92,26 +76,6 @@ class TestOpenSSL:
             backend.cipher_supported(DummyCipherAlgorithm(), DummyMode())
             is False
         )
-
-    def test_register_duplicate_cipher_adapter(self):
-        with pytest.raises(ValueError):
-            backend.register_cipher_adapter(AES, CBC, None)
-
-    @pytest.mark.parametrize("mode", [DummyMode(), None])
-    def test_nonexistent_cipher(self, mode, backend, monkeypatch):
-        # We can't use register_cipher_adapter because backend is a
-        # global singleton and we want to revert the change after the test
-        monkeypatch.setitem(
-            backend._cipher_registry,
-            (DummyCipherAlgorithm, type(mode)),
-            lambda backend, cipher, mode: backend._ffi.NULL,
-        )
-        cipher = Cipher(
-            DummyCipherAlgorithm(),
-            mode,
-        )
-        with raises_unsupported_algorithm(_Reasons.UNSUPPORTED_CIPHER):
-            cipher.encryptor()
 
     def test_openssl_assert(self):
         backend.openssl_assert(True)
@@ -141,22 +105,8 @@ class TestOpenSSL:
         cipher = backend._lib.EVP_get_cipherbyname(b"aes-256-cbc")
         assert cipher != backend._ffi.NULL
 
-    def test_unknown_error_in_cipher_finalize(self):
-        cipher = Cipher(AES(b"\0" * 16), CBC(b"\0" * 16), backend=backend)
-        enc = cipher.encryptor()
-        enc.update(b"\0")
-        backend._lib.ERR_put_error(0, 0, 1, b"test_openssl.py", -1)
-        with pytest.raises(InternalError):
-            enc.finalize()
-
 
 class TestOpenSSLRSA:
-    def test_generate_rsa_parameters_supported(self):
-        assert backend.generate_rsa_parameters_supported(1, 1024) is False
-        assert backend.generate_rsa_parameters_supported(4, 1024) is False
-        assert backend.generate_rsa_parameters_supported(3, 1024) is True
-        assert backend.generate_rsa_parameters_supported(3, 511) is False
-
     def test_rsa_padding_unsupported_pss_mgf1_hash(self):
         assert (
             backend.rsa_padding_supported(
@@ -251,46 +201,10 @@ class TestOpenSSLRSA:
 
 
 class TestOpenSSLSerializationWithOpenSSL:
-    def test_pem_password_cb(self):
-        userdata = backend._ffi.new("CRYPTOGRAPHY_PASSWORD_DATA *")
-        pw = b"abcdefg"
-        password = backend._ffi.new("char []", pw)
-        userdata.password = password
-        userdata.length = len(pw)
-        buflen = 10
-        buf = backend._ffi.new("char []", buflen)
-        res = backend._lib.Cryptography_pem_password_cb(
-            buf, buflen, 0, userdata
-        )
-        assert res == len(pw)
-        assert userdata.called == 1
-        assert backend._ffi.buffer(buf, len(pw))[:] == pw
-        assert userdata.maxsize == buflen
-        assert userdata.error == 0
-
-    def test_pem_password_cb_no_password(self):
-        userdata = backend._ffi.new("CRYPTOGRAPHY_PASSWORD_DATA *")
-        buflen = 10
-        buf = backend._ffi.new("char []", buflen)
-        res = backend._lib.Cryptography_pem_password_cb(
-            buf, buflen, 0, userdata
-        )
-        assert res == 0
-        assert userdata.error == -1
-
-    def test_unsupported_evp_pkey_type(self):
-        key = backend._create_evp_pkey_gc()
-        with raises_unsupported_algorithm(None):
-            backend._evp_pkey_to_private_key(
-                key, unsafe_skip_rsa_key_validation=False
-            )
-        with raises_unsupported_algorithm(None):
-            backend._evp_pkey_to_public_key(key)
-
     def test_very_long_pem_serialization_password(self):
-        password = b"x" * 1024
+        password = b"x" * 1025
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Passwords longer than"):
             load_vectors_from_file(
                 os.path.join(
                     "asymmetric",
@@ -298,7 +212,7 @@ class TestOpenSSLSerializationWithOpenSSL:
                     "key1.pem",
                 ),
                 lambda pemfile: (
-                    backend.load_pem_private_key(
+                    serialization.load_pem_private_key(
                         pemfile.read().encode(),
                         password,
                         unsafe_skip_rsa_key_validation=False,
@@ -348,23 +262,3 @@ class TestOpenSSLDHSerialization:
         )
         with pytest.raises(ValueError):
             loader_func(key_bytes, None, backend)
-
-    @pytest.mark.parametrize(
-        ("key_path", "loader_func"),
-        [
-            (
-                os.path.join("asymmetric", "DH", "dhpub_rfc5114_2.pem"),
-                serialization.load_pem_public_key,
-            ),
-            (
-                os.path.join("asymmetric", "DH", "dhpub_rfc5114_2.der"),
-                serialization.load_der_public_key,
-            ),
-        ],
-    )
-    def test_public_load_dhx_unsupported(self, key_path, loader_func, backend):
-        key_bytes = load_vectors_from_file(
-            key_path, lambda pemfile: pemfile.read(), mode="rb"
-        )
-        with pytest.raises(ValueError):
-            loader_func(key_bytes, backend)

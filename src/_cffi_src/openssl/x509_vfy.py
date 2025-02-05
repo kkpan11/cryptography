@@ -14,12 +14,10 @@ INCLUDES = """
  * together with another opaque typedef for the same name in the TYPES section.
  * Note that the result is an opaque type.
  */
-typedef STACK_OF(ASN1_OBJECT) Cryptography_STACK_OF_ASN1_OBJECT;
 typedef STACK_OF(X509_OBJECT) Cryptography_STACK_OF_X509_OBJECT;
 """
 
 TYPES = """
-typedef ... Cryptography_STACK_OF_ASN1_OBJECT;
 typedef ... Cryptography_STACK_OF_X509_OBJECT;
 
 typedef ... X509_OBJECT;
@@ -122,8 +120,6 @@ static const long X509_PURPOSE_CRL_SIGN;
 static const long X509_PURPOSE_ANY;
 static const long X509_PURPOSE_OCSP_HELPER;
 static const long X509_PURPOSE_TIMESTAMP_SIGN;
-static const long X509_PURPOSE_MIN;
-static const long X509_PURPOSE_MAX;
 """
 
 FUNCTIONS = """

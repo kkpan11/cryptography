@@ -4,6 +4,7 @@
 
 #![forbid(unsafe_code)]
 #![deny(rust_2018_idioms, clippy::undocumented_unsafe_blocks)]
+#![allow(unknown_lints, clippy::result_large_err)]
 
 pub mod certificate;
 pub mod common;
@@ -14,4 +15,6 @@ pub mod name;
 pub mod ocsp_req;
 pub mod ocsp_resp;
 pub mod oid;
+pub mod pkcs12;
 pub mod pkcs7;
+pub mod pkcs8;

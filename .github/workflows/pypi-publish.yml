@@ -30,65 +30,34 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
     permissions:
       id-token: "write"
+      attestations: "write"
     steps:
-      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
-        with:
-          python-version: "3.11"
-      - name: Get publish-requirements.txt from repository
-        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-        with:
-          sparse-checkout: |
-            ${{ env.PUBLISH_REQUIREMENTS_PATH }}
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-      - name: Install Python dependencies
-        run: pip install --require-hashes -r ${{ env.PUBLISH_REQUIREMENTS_PATH }}
-
-      - uses: dawidd6/action-download-artifact@e7466d1a7587ed14867642c2ca74b5bcc1e19a2d # v3.0.0
-        with:
-          path: dist/
-          run_id: ${{ github.event.inputs.run_id || github.event.workflow_run.id }}
+      - run: echo "$EVENT_CONTEXT"
+        env:
+          EVENT_CONTEXT: ${{ toJson(github.event) }}
 
       - run: |
-          echo "OIDC_AUDIENCE=pypi" >> $GITHUB_ENV
-          echo "PYPI_DOMAIN=pypi.org" >> $GITHUB_ENV
-          echo "TWINE_REPOSITORY=pypi" >> $GITHUB_ENV
-          echo "TWINE_USERNAME=__token__" >> $GITHUB_ENV
+          echo "PYPI_URL=https://upload.pypi.org/legacy/" >> $GITHUB_ENV
         if: github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'pypi')
       - run: |
-          echo "OIDC_AUDIENCE=testpypi" >> $GITHUB_ENV
-          echo "PYPI_DOMAIN=test.pypi.org" >> $GITHUB_ENV
-          echo "TWINE_REPOSITORY=testpypi" >> $GITHUB_ENV
-          echo "TWINE_USERNAME=__token__" >> $GITHUB_ENV
+          echo "PYPI_URL=https://test.pypi.org/legacy/" >> $GITHUB_ENV
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'testpypi'
 
+      - uses: dawidd6/action-download-artifact@20319c5641d495c8a52e688b7dc5fada6c3a9fbc # v8
+        with:
+          path: tmpdist/
+          run_id: ${{ github.event.inputs.run_id || github.event.workflow_run.id }}
+      - run: mkdir dist/
       - run: |
-          import os
+          find tmpdist/ -type f -name 'cryptography*' -exec mv {} dist/ \;
 
-          import requests
-
-          response = requests.get(
-              os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"],
-              params={"audience": os.environ["OIDC_AUDIENCE"]},
-              headers={"Authorization": f"bearer {os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}"}
-          )
-          response.raise_for_status()
-          token = response.json()["value"]
-
-          response = requests.post(f"https://{os.environ['PYPI_DOMAIN']}/_/oidc/github/mint-token", json={"token": token})
-          response.raise_for_status()
-          pypi_token = response.json()["token"]
-
-          with open(os.environ["GITHUB_ENV"], "a") as f:
-              print(f"::add-mask::{pypi_token}")
-              f.write(f"TWINE_PASSWORD={pypi_token}\n")
-        shell: python
-
-      - run: twine upload --skip-existing $(find dist/ -type f -name 'cryptography*')
-
-      # Do not perform sigstore signatures for things for TestPyPI. This is
-      # because there's nothing that would prevent a malicious PyPI from
-      # serving a signed TestPyPI asset in place of a release intended for
-      # PyPI.
-      - run: sigstore sign $(find dist/ -type f -name 'cryptography*')
-        if: env.TWINE_REPOSITORY == 'pypi'
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc  # v1.12.4
+        with:
+          repository-url: ${{ env.PYPI_URL }}
+          skip-existing: true
+          # Do not perform attestation for things for TestPyPI. This is
+          # because there's nothing that would prevent a malicious PyPI from
+          # serving a signed TestPyPI asset in place of a release intended for
+          # PyPI.
+          attestations: ${{ env.PYPI_URL == 'https://upload.pypi.org/legacy/' }}

@@ -47,6 +47,7 @@ extensions = [
     "sphinx.ext.linkcode",
     "cryptography-docs",
     "sphinx_rtd_theme",
+    "sphinx_inline_tabs",
 ]
 
 if spelling is not None:
@@ -71,7 +72,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "Cryptography"
-copyright = "2013-2023, Individual Contributors"
+copyright = "2013-2025, Individual Contributors"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -195,17 +196,18 @@ linkcheck_timeout = 5
 linkcheck_ignore = [
     # Insecure renegotiation settings
     r"https://info.isl.ntt.co.jp/crypt/eng/camellia/",
-    # Inconsistent small DH params they seem incapable of fixing
-    r"https://www.secg.org/sec1-v2.pdf",
     # Cloudflare returns 403s for all non-browser requests
     r"https://speakerdeck.com",
     r"https://\w+.stackexchange.com",
     r"https://stackoverflow.com",
+    r"https://webstore.ansi.org",
     # GitHub changed how they do page renders so anchor detection
     # no longer works in source view
     r"https://github.com/.*/blob/.*#L\d+",
     # Kuleuven struggles with the endless forward march of time
     r"https://www.cosic.esat.kuleuven.be",
+    # CMU doesn't know how to send intermediates
+    r"https://wiki.sei.cmu.edu",
 ]
 
 autosectionlabel_prefix_document = True

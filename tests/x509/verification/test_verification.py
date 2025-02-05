@@ -11,7 +11,11 @@ import pytest
 
 from cryptography import x509
 from cryptography.x509.general_name import DNSName, IPAddress
-from cryptography.x509.verification import PolicyBuilder, Store
+from cryptography.x509.verification import (
+    PolicyBuilder,
+    Store,
+    VerificationError,
+)
 from tests.x509.test_x509 import _load_cert
 
 
@@ -103,3 +107,118 @@ class TestStore:
     def test_store_rejects_non_certificates(self):
         with pytest.raises(TypeError):
             Store(["not a cert"])  # type: ignore[list-item]
+
+
+class TestClientVerifier:
+    def test_build_client_verifier_missing_store(self):
+        with pytest.raises(
+            ValueError, match="A client verifier must have a trust store"
+        ):
+            PolicyBuilder().build_client_verifier()
+
+    def test_verify(self):
+        # expires 2018-11-16 01:15:03 UTC
+        leaf = _load_cert(
+            os.path.join("x509", "cryptography.io.pem"),
+            x509.load_pem_x509_certificate,
+        )
+
+        store = Store([leaf])
+
+        validation_time = datetime.datetime.fromisoformat(
+            "2018-11-16T00:00:00+00:00"
+        )
+        builder = PolicyBuilder().store(store)
+        builder = builder.time(validation_time).max_chain_depth(16)
+        verifier = builder.build_client_verifier()
+
+        assert verifier.validation_time == validation_time.replace(tzinfo=None)
+        assert verifier.max_chain_depth == 16
+        assert verifier.store is store
+
+        verified_client = verifier.verify(leaf, [])
+        assert verified_client.chain == [leaf]
+
+        assert verified_client.subjects is not None
+        assert x509.DNSName("www.cryptography.io") in verified_client.subjects
+        assert x509.DNSName("cryptography.io") in verified_client.subjects
+        assert len(verified_client.subjects) == 2
+
+    def test_verify_fails_renders_oid(self):
+        leaf = _load_cert(
+            os.path.join("x509", "custom", "ekucrit-testuser-cert.pem"),
+            x509.load_pem_x509_certificate,
+        )
+
+        store = Store([leaf])
+
+        validation_time = datetime.datetime.fromisoformat(
+            "2024-06-26T00:00:00+00:00"
+        )
+
+        builder = PolicyBuilder().store(store)
+        builder = builder.time(validation_time)
+        verifier = builder.build_client_verifier()
+
+        pattern = (
+            r"invalid extension: 2\.5\.29\.37: "
+            r"Certificate extension has incorrect criticality"
+        )
+        with pytest.raises(
+            VerificationError,
+            match=pattern,
+        ):
+            verifier.verify(leaf, [])
+
+
+class TestServerVerifier:
+    @pytest.mark.parametrize(
+        ("validation_time", "valid"),
+        [
+            # 03:15:02 UTC+2, or 1 second before expiry in UTC
+            ("2018-11-16T03:15:02+02:00", True),
+            # 00:15:04 UTC-1, or 1 second after expiry in UTC
+            ("2018-11-16T00:15:04-01:00", False),
+        ],
+    )
+    def test_verify_tz_aware(self, validation_time, valid):
+        # expires 2018-11-16 01:15:03 UTC
+        leaf = _load_cert(
+            os.path.join("x509", "cryptography.io.pem"),
+            x509.load_pem_x509_certificate,
+        )
+
+        store = Store([leaf])
+
+        builder = PolicyBuilder().store(store)
+        builder = builder.time(
+            datetime.datetime.fromisoformat(validation_time)
+        )
+        verifier = builder.build_server_verifier(DNSName("cryptography.io"))
+
+        if valid:
+            assert verifier.verify(leaf, []) == [leaf]
+        else:
+            with pytest.raises(
+                x509.verification.VerificationError,
+                match="cert is not valid at validation time",
+            ):
+                verifier.verify(leaf, [])
+
+    def test_error_message(self):
+        # expires 2018-11-16 01:15:03 UTC
+        leaf = _load_cert(
+            os.path.join("x509", "cryptography.io.pem"),
+            x509.load_pem_x509_certificate,
+        )
+
+        store = Store([leaf])
+
+        builder = PolicyBuilder().store(store)
+        verifier = builder.build_server_verifier(DNSName("cryptography.io"))
+
+        with pytest.raises(
+            x509.verification.VerificationError,
+            match=r"<Certificate\(subject=.*?CN=www.cryptography.io.*?\)>",
+        ):
+            verifier.verify(leaf, [])
