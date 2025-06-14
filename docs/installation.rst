@@ -28,7 +28,7 @@ operating systems.
 * x86-64 CentOS Stream 9, 10
 * x86-64 Fedora (latest)
 * x86-64 macOS 13 Ventura and ARM64 macOS 14 Sonoma
-* x86-64 Ubuntu 20.04, 22.04, 24.04, rolling
+* x86-64 Ubuntu 22.04, 24.04, rolling
 * ARM64 Ubuntu rolling
 * ARMv7l Ubuntu rolling
 * x86-64 Debian Bullseye (11.x), Bookworm (12.x), Trixie (13.x), and
@@ -264,9 +264,7 @@ development headers.
 
 You will also need to have :ref:`Rust installed and
 available<installation:Rust>`, which can be obtained from `Homebrew`_,
-`MacPorts`_, or directly from the Rust website. If you are linking against a
-``universal2`` archive of OpenSSL, the minimum supported Rust version is
-1.66.0.
+`MacPorts`_, or directly from the Rust website.
 
 Finally you need OpenSSL, which you can obtain from `Homebrew`_ or `MacPorts`_.
 Cryptography does **not** support the OpenSSL/LibreSSL libraries Apple ships
@@ -279,14 +277,14 @@ To build cryptography and dynamically link it:
 .. code-block:: console
 
     $ brew install openssl@3 rust
-    $ env OPENSSL_DIR="$(brew --prefix openssl@3)" pip install cryptography
+    $ pip install --no-binary cryptography cryptography
 
 `MacPorts`_:
 
 .. code-block:: console
 
     $ sudo port install openssl rust
-    $ env OPENSSL_DIR="-L/opt/local" pip install cryptography
+    $ env OPENSSL_DIR="-L/opt/local" pip install --no-binary cryptography cryptography
 
 You can also build cryptography statically:
 
@@ -295,17 +293,24 @@ You can also build cryptography statically:
 .. code-block:: console
 
     $ brew install openssl@3 rust
-    $ env OPENSSL_STATIC=1 OPENSSL_DIR="$(brew --prefix openssl@3)" pip install cryptography
+    $ env OPENSSL_STATIC=1 pip install --no-binary cryptography cryptography
 
 `MacPorts`_:
 
 .. code-block:: console
 
     $ sudo port install openssl rust
-    $ env OPENSSL_STATIC=1 OPENSSL_DIR="/opt/local" pip install cryptography
+    $ env OPENSSL_STATIC=1 OPENSSL_DIR="/opt/local" pip install --no-binary cryptography cryptography
 
 If you need to rebuild ``cryptography`` for any reason be sure to clear the
 local `wheel cache`_.
+
+Building with BoringSSL, LibreSSL, or AWS-LC
+--------------------------------------------
+
+To build against BoringSSL, LibreSSL, or AWS-LC instead of OpenSSL, you can set the
+``OPENSSL_DIR`` environment variable to point to your BoringSSL, LibreSSL, or AWS-LC
+installation directory.
 
 Rust
 ----

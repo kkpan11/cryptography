@@ -16,6 +16,24 @@ Changelog
   classes from the cipher module. These are still available in
   :doc:`/hazmat/decrepit/index`.
 
+.. _v45-0-4:
+
+45.0.4 - 2025-06-09
+~~~~~~~~~~~~~~~~~~~
+
+* Fixed decrypting PKCS#8 files encrypted with SHA1-RC4. (This is not
+  considered secure, and is supported only for backwards compatibility.)
+
+.. _v45-0-3:
+
+45.0.3 - 2025-05-25
+~~~~~~~~~~~~~~~~~~~
+
+* Fixed decrypting PKCS#8 files encrypted with long salts (this impacts keys
+  encrypted by Bouncy Castle).
+* Fixed decrypting PKCS#8 files encrypted with DES-CBC-MD5. While wildly
+  insecure, this remains prevalent.
+
 .. _v45-0-2:
 
 45.0.2 - 2025-05-17

@@ -67,6 +67,8 @@ Asymmetric ciphers
 * ``asymmetric/PKCS8/rsa-rc2-cbc-effective-key-length.pem`` a PKCS8 encoded key
   encrypted with ``RC2-CBC`` with the ``effectiveKeyLength`` parameter set to
   258. This is an invalid key.
+* ``asymmetric/PKCS8/enc-ec-sha1-128-rc4.pem`` a PKCS8 encoded ECDSA P-256 key
+  encrypted with ``pbeWithSHA1And128BitRC4``. The password is ``password``.
 
 
 Custom asymmetric vectors
@@ -285,6 +287,11 @@ Custom asymmetric vectors
   RSA key in an encrypted PEM with a malformed IV (not valid hex).
 * ``asymmetric/Traditional_OpenSSL_Serialization/key1-short-iv.pem`` - An
   RSA key in an encrypted PEM with an IV that's too short (less than 8 bytes).
+* ``asymmetric/PKCS8/rsa-pbewithmd5anddescbc.pem`` - A PKCS8 encoded RSA key
+  encrypted using the ``pbeWithMD5AndDES-CBC`` algorithm with the password
+  ``hunter2``.
+* ``asymmetric/PKCS8/rsa-pbe-3des-long-salt.pem`` - A PKCS8 encoded RSA key
+  encrypted with a 20 byte salt with the password ``password``.
 
 Key exchange
 ~~~~~~~~~~~~
